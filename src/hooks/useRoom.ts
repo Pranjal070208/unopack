@@ -76,7 +76,13 @@ export function useRoom(code: string, creds: RoomCreds | null) {
     setRoom(r as RoomRow);
     roomIdRef.current = r.id;
     const [{ data: ps }, { data: gs }, { data: es }] = await Promise.all([
-      supabase.from("players").select("*").eq("room_id", r.id).order("seat"),
+      supabase
+        .from("players")
+        .select(
+          "id, room_id, nickname, avatar, is_host, is_connected, seat, card_count, eliminated, finished_rank, last_seen, joined_at",
+        )
+        .eq("room_id", r.id)
+        .order("seat"),
       supabase.from("games").select("*").eq("room_id", r.id).order("created_at", { ascending: false }).limit(1),
       supabase.from("game_events").select("*").eq("room_id", r.id).order("id", { ascending: false }).limit(40),
     ]);
