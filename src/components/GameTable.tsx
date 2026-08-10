@@ -12,6 +12,13 @@ const TURN_SECONDS: number = GAME_CONFIG.TURN_SECONDS;
 import type { GameRow, PlayerRow } from "@/hooks/useRoom";
 import { cn } from "@/lib/utils";
 
+const COLOR_CHOICES: { color: Exclude<CardColor, "wild">; label: string; css: string }[] = [
+  { color: "red", label: "Red", css: "var(--ono-red)" },
+  { color: "yellow", label: "Yellow", css: "var(--ono-yellow)" },
+  { color: "green", label: "Green", css: "var(--ono-green)" },
+  { color: "blue", label: "Blue", css: "var(--ono-blue)" },
+];
+
 interface Props {
   game: GameRow;
   players: PlayerRow[];
@@ -22,6 +29,10 @@ interface Props {
   onPlay: (cardId: string, color?: Exclude<CardColor, "wild">) => void;
   onDraw: () => void;
   onTimeout: () => void;
+  onChooseColor: (color: Exclude<CardColor, "wild">) => void;
+  onChooseSwapTarget: (targetId: string) => void;
+  onCallUno: () => void;
+  onCatchUno: (targetId: string) => void;
   header: React.ReactNode;
   footer: React.ReactNode;
 }
@@ -36,6 +47,10 @@ export function GameTable({
   onPlay,
   onDraw,
   onTimeout,
+  onChooseColor,
+  onChooseSwapTarget,
+  onCallUno,
+  onCatchUno,
   header,
   footer,
 }: Props) {
@@ -43,6 +58,13 @@ export function GameTable({
   const myTurn = !!me && game.current_player_id === me.id;
   const opponents = players.filter((p) => p.id !== me?.id);
   const current = players.find((p) => p.id === game.current_player_id);
+  const phase = game.phase ?? "PLAYER_TURN";
+  const uno = game.public_state?.uno ?? null;
+  const mustPickColor = myTurn && phase === "CHOOSING_COLOR";
+  const mustPickTarget = myTurn && phase === "CHOOSING_SWAP_TARGET";
+  const canCallUno = !!me && uno?.playerId === me.id && !uno.called;
+  const catchTarget = uno && !uno.called && uno.playerId !== me?.id ? uno.playerId : null;
+
 
   useEffect(() => {
     const tick = () => {
