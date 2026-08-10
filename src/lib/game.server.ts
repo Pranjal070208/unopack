@@ -43,7 +43,6 @@ function sanitizeEventData(type: string, data: Record<string, unknown>): Record<
   const out: Record<string, unknown> = { ...data };
   delete out["seed"];
   if (type === "CARD_DRAWN" || type === "DRAW_STACK_RESOLVED") delete out["card"];
-  if (type === "DISCARD_ALL_RESOLVED") delete out["cards"];
   return out;
 }
 
