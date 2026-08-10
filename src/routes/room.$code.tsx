@@ -299,6 +299,11 @@ function RoomPage() {
             void cmd(color ? { type: "PLAY_CARD", cardId, color } : { type: "PLAY_CARD", cardId })
           }
           onDraw={() => void cmd({ type: "DRAW_CARD" })}
+          onChooseColor={(color) => void cmd({ type: "CHOOSE_COLOR", color })}
+          onChooseSwapTarget={(targetId) => void cmd({ type: "CHOOSE_SWAP_TARGET", targetId })}
+          onCallUno={() => void cmd({ type: "CALL_UNO" })}
+          onCatchUno={(targetId) => void cmd({ type: "CATCH_UNO", targetId })}
+
 
           onTimeout={onTimeout}
           header={statusBar}
