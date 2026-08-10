@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import type { Card } from "@/game/gameTypes";
+import type { Card, PublicGameState } from "@/game/gameTypes";
 import { getMyHand, heartbeat } from "@/lib/game.functions";
 import type { RoomCreds } from "@/lib/session";
 
