@@ -83,10 +83,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "ONO No Mercy — Real-Time Multiplayer Card Chaos" },
       {
         name: "description",
-        content: "Private rooms, brutal +10 stacks and 25-card eliminations. Play ONO No Mercy with friends online.",
+        content:
+          "Play ONO No Mercy online with friends: private rooms, brutal +10 stacks, 25-card eliminations and real-time chaos in your browser.",
       },
-      { property: "og:title", content: "ONO No Mercy" },
-      { property: "og:description", content: "Real-time multiplayer card chaos with friends." },
+      { property: "og:title", content: "ONO No Mercy — Real-Time Multiplayer Card Chaos" },
+      {
+        property: "og:description",
+        content:
+          "Play ONO No Mercy online with friends: private rooms, brutal +10 stacks, 25-card eliminations and real-time chaos in your browser.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "theme-color", content: "#0a0a0c" },
