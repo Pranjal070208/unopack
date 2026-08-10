@@ -7,7 +7,7 @@ import { CardBack } from "./Card";
 import { GAME_CONFIG } from "@/game/config";
 import type { Card, CardColor } from "@/game/gameTypes";
 
-const TURN_SECONDS = GAME_CONFIG.TURN_SECONDS;
+const TURN_SECONDS: number = GAME_CONFIG.TURN_SECONDS;
 
 import type { GameRow, PlayerRow } from "@/hooks/useRoom";
 import { cn } from "@/lib/utils";
