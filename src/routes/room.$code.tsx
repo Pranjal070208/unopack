@@ -13,17 +13,17 @@ import { AVATARS } from "@/lib/avatars";
 import { useRoom, type EventRow } from "@/hooks/useRoom";
 import { playSound, useSound } from "@/hooks/useSound";
 import {
-  drawCardFn,
   enforceTimeout,
   joinRoom,
   kickPlayer,
   leaveRoom,
   playAgain,
-  playCardFn,
   returnToLobby,
+  sendCommand,
   sendRoomEvent,
   startGame,
 } from "@/lib/game.functions";
+
 import { clearCreds, getSessionId, loadCreds, loadProfile, saveCreds, saveProfile } from "@/lib/session";
 import type { CardColor } from "@/game/gameTypes";
 import { cn } from "@/lib/utils";
