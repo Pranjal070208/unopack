@@ -4,7 +4,11 @@ import { PlayerAvatar } from "./PlayerAvatar";
 import { PlayerHand } from "./PlayerHand";
 import { DiscardPile, DrawPile } from "./Piles";
 import { CardBack } from "./Card";
-import { TURN_SECONDS, type Card, type CardColor } from "@/game/gameTypes";
+import { GAME_CONFIG } from "@/game/config";
+import type { Card, CardColor } from "@/game/gameTypes";
+
+const TURN_SECONDS = GAME_CONFIG.TURN_SECONDS;
+
 import type { GameRow, PlayerRow } from "@/hooks/useRoom";
 import { cn } from "@/lib/utils";
 
