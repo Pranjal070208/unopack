@@ -259,3 +259,24 @@ export function GameTable({
 
   );
 }
+
+function Overlay({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="fixed inset-0 z-40 grid place-items-center bg-background/85 px-6 backdrop-blur-sm"
+    >
+      <motion.div
+        initial={{ scale: 0.9, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        className="panel w-full max-w-sm space-y-4 p-5"
+      >
+        <p className="text-center font-display text-sm uppercase tracking-[0.25em] text-[var(--ono-yellow)]">
+          {title}
+        </p>
+        {children}
+      </motion.div>
+    </motion.div>
+  );
+}
