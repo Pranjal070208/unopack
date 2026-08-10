@@ -1,55 +1,70 @@
-import type { Card, CardColor } from "./gameTypes";
+import { COLORS, type Card, type CardColor } from "./cardTypes";
+import { shuffle as shuffleWith, type Rng } from "./rng";
 
-const COLORS: Exclude<CardColor, "wild">[] = ["red", "yellow", "green", "blue"];
+/**
+ * Official UNO Show 'Em No Mercy deck — exactly 168 cards.
+ *
+ * Per colour: 2x each number 0-9 (20), 3x Draw Two, 2x Draw Four, 3x Reverse,
+ * 3x Skip, 2x Skip Everyone, 3x Discard All  => 36 per colour, 144 total.
+ * Wilds: 8x Wild Reverse Draw Four, 4x Wild Draw Six, 4x Wild Draw Ten,
+ * 8x Wild Color Roulette => 24. 144 + 24 = 168.
+ */
+export const DECK_SIZE = 168;
 
-let counter = 0;
-function uid(prefix: string): string {
-  counter += 1;
-  return `${prefix}${counter}_${Math.random().toString(36).slice(2, 8)}`;
+export const COLORED_COUNTS = {
+  numberEach: 2,
+  draw2: 3,
+  draw4: 2,
+  reverse: 3,
+  skip: 3,
+  skipall: 2,
+  discardall: 3,
+} as const;
+
+export const WILD_COUNTS = {
+  wildreversedraw4: 8,
+  wilddraw6: 4,
+  wilddraw10: 4,
+  wildroulette: 8,
+} as const;
+
+function pad(n: number): string {
+  return String(n).padStart(2, "0");
 }
 
-/** ONO No Mercy style deck: standard cards plus the brutal extras. */
 export function createDeck(): Card[] {
   const deck: Card[] = [];
 
-  for (const color of COLORS) {
-    deck.push({ id: uid("c"), color, kind: "number", value: 0 });
-    for (let v = 1; v <= 9; v++) {
-      deck.push({ id: uid("c"), color, kind: "number", value: v });
-      deck.push({ id: uid("c"), color, kind: "number", value: v });
+  for (const color of COLORS as CardColor[]) {
+    for (let value = 0; value <= 9; value++) {
+      for (let copy = 1; copy <= COLORED_COUNTS.numberEach; copy++) {
+        deck.push({ id: `${color}_${value}_${pad(copy)}`, color, type: "number", value });
+      }
     }
-    for (let i = 0; i < 2; i++) {
-      deck.push({ id: uid("c"), color, kind: "skip" });
-      deck.push({ id: uid("c"), color, kind: "reverse" });
-      deck.push({ id: uid("c"), color, kind: "draw2" });
+    const actions = [
+      ["draw2", COLORED_COUNTS.draw2],
+      ["draw4", COLORED_COUNTS.draw4],
+      ["reverse", COLORED_COUNTS.reverse],
+      ["skip", COLORED_COUNTS.skip],
+      ["skipall", COLORED_COUNTS.skipall],
+      ["discardall", COLORED_COUNTS.discardall],
+    ] as const;
+    for (const [type, count] of actions) {
+      for (let copy = 1; copy <= count; copy++) {
+        deck.push({ id: `${color}_${type}_${pad(copy)}`, color, type });
+      }
     }
-    deck.push({ id: uid("c"), color, kind: "skipall" });
-    deck.push({ id: uid("c"), color, kind: "discardall" });
   }
 
-  for (let i = 0; i < 4; i++) {
-    deck.push({ id: uid("c"), color: "wild", kind: "wild" });
-    deck.push({ id: uid("c"), color: "wild", kind: "draw4" });
-  }
-  for (let i = 0; i < 3; i++) {
-    deck.push({ id: uid("c"), color: "wild", kind: "draw6" });
-    deck.push({ id: uid("c"), color: "wild", kind: "reversedraw4" });
-  }
-  for (let i = 0; i < 2; i++) {
-    deck.push({ id: uid("c"), color: "wild", kind: "draw10" });
+  for (const [type, count] of Object.entries(WILD_COUNTS)) {
+    for (let copy = 1; copy <= count; copy++) {
+      deck.push({ id: `wild_${type}_${pad(copy)}`, color: "wild", type: type as Card["type"] });
+    }
   }
 
   return deck;
 }
 
-export function shuffleDeck<T>(cards: T[]): T[] {
-  const out = cards.slice();
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const a = out[i]!;
-    const b = out[j]!;
-    out[i] = b;
-    out[j] = a;
-  }
-  return out;
+export function shuffleDeck(cards: Card[], rng: Rng): Card[] {
+  return shuffleWith(cards, rng);
 }
