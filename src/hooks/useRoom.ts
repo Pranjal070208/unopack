@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import type { Card } from "@/game/gameTypes";
+import type { Card, PublicGameState } from "@/game/gameTypes";
 import { getMyHand, heartbeat } from "@/lib/game.functions";
 import type { RoomCreds } from "@/lib/session";
 
@@ -30,6 +30,7 @@ export interface GameRow {
   id: string;
   room_id: string;
   status: string;
+  phase?: string | null;
   current_player_id: string | null;
   direction: number;
   pending_draw: number;
@@ -38,7 +39,9 @@ export interface GameRow {
   turn_started_at: string;
   turn_count: number;
   winner_id: string | null;
+  public_state?: PublicGameState | null;
 }
+
 
 export interface EventRow {
   id: number;

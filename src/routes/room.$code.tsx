@@ -13,17 +13,17 @@ import { AVATARS } from "@/lib/avatars";
 import { useRoom, type EventRow } from "@/hooks/useRoom";
 import { playSound, useSound } from "@/hooks/useSound";
 import {
-  drawCardFn,
   enforceTimeout,
   joinRoom,
   kickPlayer,
   leaveRoom,
   playAgain,
-  playCardFn,
   returnToLobby,
+  sendCommand,
   sendRoomEvent,
   startGame,
 } from "@/lib/game.functions";
+
 import { clearCreds, getSessionId, loadCreds, loadProfile, saveCreds, saveProfile } from "@/lib/session";
 import type { CardColor } from "@/game/gameTypes";
 import { cn } from "@/lib/utils";
@@ -43,37 +43,54 @@ export const Route = createFileRoute("/room/$code")({
   component: RoomPage,
 });
 
+const PLAY_EFFECTS: Record<string, { text: string; tone: NonNullable<Effect["tone"]> }> = {
+  skip: { text: "SKIPPED!", tone: "yellow" },
+  reverse: { text: "REVERSE!", tone: "yellow" },
+  draw2: { text: "+2!", tone: "yellow" },
+  draw4: { text: "+4!", tone: "red" },
+  skipall: { text: "SKIP EVERYONE!", tone: "yellow" },
+  discardall: { text: "DISCARD ALL!", tone: "green" },
+  wildreversedraw4: { text: "REVERSE +4!", tone: "red" },
+  wilddraw6: { text: "+6!", tone: "red" },
+  wilddraw10: { text: "+10 NO MERCY!", tone: "red" },
+  wildroulette: { text: "COLOR ROULETTE!", tone: "blue" },
+};
+
 function effectFor(e: EventRow): Effect | null {
-  const data = e.event_data as { card?: { kind?: string; color?: string }; count?: number; nickname?: string };
+  const data = e.event_data as { card?: { type?: string; value?: number }; count?: number };
   switch (e.event_type) {
-    case "play": {
-      const kind = data.card?.kind;
-      if (!kind || kind === "number") return null;
-      const map: Record<string, string> = {
-        skip: "SKIPPED!",
-        reverse: "REVERSE!",
-        draw2: "+2!",
-        draw4: "+4!",
-        draw6: "+6!",
-        draw10: "+10 NO MERCY!",
-        reversedraw4: "REVERSE +4!",
-        skipall: "SKIP EVERYONE!",
-        discardall: "DISCARD ALL!",
-        wild: "WILD!",
-      };
-      const text = map[kind];
-      return text ? { id: e.id, text, tone: kind === "draw10" ? "red" : "yellow" } : null;
+    case "CARD_PLAYED": {
+      const type = data.card?.type;
+      if (!type) return null;
+      if (type === "number" && data.card?.value === 7) return { id: e.id, text: "SWAP!", tone: "green" };
+      if (type === "number" && data.card?.value === 0) return { id: e.id, text: "PASS 'EM ALL!", tone: "green" };
+      const fx = PLAY_EFFECTS[type];
+      if (!fx) return null;
+      return { id: e.id, text: fx.text, tone: fx.tone };
     }
-    case "eliminated":
+    case "HAND_SWAPPED":
+      return { id: e.id, text: "HANDS SWAPPED!", tone: "green" };
+    case "HANDS_ROTATED":
+      return { id: e.id, text: "EVERYONE PASSES!", tone: "green" };
+    case "DRAW_STACK_RESOLVED":
+      return { id: e.id, text: `TAKE ${Number(data.count ?? 0)}!`, tone: "red" };
+    case "UNO_CALLED":
+      return { id: e.id, text: "ONO!", tone: "yellow" };
+    case "UNO_CAUGHT":
+      return { id: e.id, text: "CAUGHT! +2", tone: "red" };
+    case "PLAYER_ELIMINATED":
       return { id: e.id, text: "ELIMINATED!", tone: "red" };
-    case "timeout":
+    case "TURN_TIMEOUT":
       return { id: e.id, text: "TOO SLOW!", tone: "red" };
-    case "shuffle":
+    case "DECK_RESHUFFLED":
       return { id: e.id, text: "RESHUFFLE", tone: "blue" };
+    case "PLAYER_WON":
+      return { id: e.id, text: "WINNER!", tone: "yellow" };
     default:
       return null;
   }
 }
+
 
 function RoomPage() {
   const { code } = Route.useParams();
@@ -110,11 +127,12 @@ function RoomPage() {
       if (e.event_type === "player_join") setNotice(`${data.nickname ?? "SOMEONE"} JOINED`);
       if (e.event_type === "player_leave") setNotice(`${data.nickname ?? "SOMEONE"} LEFT`);
       if (e.event_type === "player_kick") setNotice(`${data.nickname ?? "SOMEONE"} WAS KICKED`);
-      if (e.event_type === "play") playSound(effectFor(e) ? "special" : "play");
-      if (e.event_type === "draw") playSound("draw");
-      if (e.event_type === "eliminated") playSound("lose");
-      if (e.event_type === "game_over") playSound("win");
-      if (e.event_type === "game_start") playSound("turn");
+      if (e.event_type === "CARD_PLAYED") playSound(effectFor(e) ? "special" : "play");
+      if (e.event_type === "CARD_DRAWN" || e.event_type === "DRAW_STACK_RESOLVED") playSound("draw");
+      if (e.event_type === "PLAYER_ELIMINATED") playSound("lose");
+      if (e.event_type === "GAME_ENDED" || e.event_type === "PLAYER_WON") playSound("win");
+      if (e.event_type === "GAME_STARTED") playSound("turn");
+
       const fx = effectFor(e);
       if (fx) setEffect(fx);
     }
@@ -164,10 +182,21 @@ function RoomPage() {
     [creds],
   );
 
+  /** Every game move goes through the single authoritative command endpoint. */
+  const cmd = useCallback(
+    (command: Record<string, unknown>) =>
+      act(sendCommand as never, {
+        command,
+        actionId: `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`,
+      }),
+    [act],
+  );
+
   const onTimeout = useCallback(() => {
     if (!creds) return;
     void enforceTimeout({ data: creds }).catch(() => undefined);
   }, [creds]);
+
 
   const handleLeave = async () => {
     await act(leaveRoom as never);
@@ -285,9 +314,15 @@ function RoomPage() {
           playable={room.playable}
           reactions={reactions}
           onPlay={(cardId, color) =>
-            void act(playCardFn as never, color ? { cardId, color } : { cardId })
+            void cmd(color ? { type: "PLAY_CARD", cardId, color } : { type: "PLAY_CARD", cardId })
           }
-          onDraw={() => void act(drawCardFn as never)}
+          onDraw={() => void cmd({ type: "DRAW_CARD" })}
+          onChooseColor={(color) => void cmd({ type: "CHOOSE_COLOR", color })}
+          onChooseSwapTarget={(targetId) => void cmd({ type: "CHOOSE_SWAP_TARGET", targetId })}
+          onCallUno={() => void cmd({ type: "CALL_UNO" })}
+          onCatchUno={(targetId) => void cmd({ type: "CATCH_UNO", targetId })}
+
+
           onTimeout={onTimeout}
           header={statusBar}
           footer={

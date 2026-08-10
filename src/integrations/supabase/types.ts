@@ -55,18 +55,21 @@ export type Database = {
       game_private: {
         Row: {
           deck: Json
+          full_state: Json
           game_id: string
           hands: Json
           pile: Json
         }
         Insert: {
           deck?: Json
+          full_state?: Json
           game_id: string
           hands?: Json
           pile?: Json
         }
         Update: {
           deck?: Json
+          full_state?: Json
           game_id?: string
           hands?: Json
           pile?: Json
@@ -90,7 +93,10 @@ export type Database = {
           discard_top: Json | null
           id: string
           pending_draw: number
+          phase: string
+          public_state: Json
           room_id: string
+          seed: number | null
           status: string
           turn_count: number
           turn_started_at: string
@@ -104,7 +110,10 @@ export type Database = {
           discard_top?: Json | null
           id?: string
           pending_draw?: number
+          phase?: string
+          public_state?: Json
           room_id: string
+          seed?: number | null
           status?: string
           turn_count?: number
           turn_started_at?: string
@@ -118,7 +127,10 @@ export type Database = {
           discard_top?: Json | null
           id?: string
           pending_draw?: number
+          phase?: string
+          public_state?: Json
           room_id?: string
+          seed?: number | null
           status?: string
           turn_count?: number
           turn_started_at?: string

@@ -4,9 +4,20 @@ import { PlayerAvatar } from "./PlayerAvatar";
 import { PlayerHand } from "./PlayerHand";
 import { DiscardPile, DrawPile } from "./Piles";
 import { CardBack } from "./Card";
-import { TURN_SECONDS, type Card, type CardColor } from "@/game/gameTypes";
+import { GAME_CONFIG } from "@/game/config";
+import type { Card, CardColor } from "@/game/gameTypes";
+
+const TURN_SECONDS: number = GAME_CONFIG.TURN_SECONDS;
+
 import type { GameRow, PlayerRow } from "@/hooks/useRoom";
 import { cn } from "@/lib/utils";
+
+const COLOR_CHOICES: { color: Exclude<CardColor, "wild">; label: string; css: string }[] = [
+  { color: "red", label: "Red", css: "var(--ono-red)" },
+  { color: "yellow", label: "Yellow", css: "var(--ono-yellow)" },
+  { color: "green", label: "Green", css: "var(--ono-green)" },
+  { color: "blue", label: "Blue", css: "var(--ono-blue)" },
+];
 
 interface Props {
   game: GameRow;
@@ -18,6 +29,10 @@ interface Props {
   onPlay: (cardId: string, color?: Exclude<CardColor, "wild">) => void;
   onDraw: () => void;
   onTimeout: () => void;
+  onChooseColor: (color: Exclude<CardColor, "wild">) => void;
+  onChooseSwapTarget: (targetId: string) => void;
+  onCallUno: () => void;
+  onCatchUno: (targetId: string) => void;
   header: React.ReactNode;
   footer: React.ReactNode;
 }
@@ -32,6 +47,10 @@ export function GameTable({
   onPlay,
   onDraw,
   onTimeout,
+  onChooseColor,
+  onChooseSwapTarget,
+  onCallUno,
+  onCatchUno,
   header,
   footer,
 }: Props) {
@@ -39,6 +58,13 @@ export function GameTable({
   const myTurn = !!me && game.current_player_id === me.id;
   const opponents = players.filter((p) => p.id !== me?.id);
   const current = players.find((p) => p.id === game.current_player_id);
+  const phase = game.phase ?? "PLAYER_TURN";
+  const uno = game.public_state?.uno ?? null;
+  const mustPickColor = myTurn && phase === "CHOOSING_COLOR";
+  const mustPickTarget = myTurn && phase === "CHOOSING_SWAP_TARGET";
+  const canCallUno = !!me && uno?.playerId === me.id && !uno.called;
+  const catchTarget = uno && !uno.called && uno.playerId !== me?.id ? uno.playerId : null;
+
 
   useEffect(() => {
     const tick = () => {
@@ -166,7 +192,91 @@ export function GameTable({
         />
       </div>
 
+      {/* UNO shout / catch */}
+      {canCallUno || catchTarget ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 flex justify-center">
+          <motion.button
+            type="button"
+            initial={{ scale: 0.7, opacity: 0 }}
+            animate={{ scale: [1, 1.06, 1], opacity: 1 }}
+            transition={{ duration: 0.9, repeat: Infinity }}
+            onClick={() => (canCallUno ? onCallUno() : catchTarget && onCatchUno(catchTarget))}
+            className="pointer-events-auto rounded-full border-[3px] border-white/80 px-7 py-3 font-display text-lg uppercase tracking-[0.2em] text-white"
+            style={{
+              background: canCallUno ? "var(--ono-yellow)" : "var(--ono-red)",
+              boxShadow: "var(--shadow-card)",
+            }}
+          >
+            {canCallUno
+              ? "Call ONO!"
+              : `Catch ${players.find((p) => p.id === catchTarget)?.nickname ?? "them"}!`}
+          </motion.button>
+        </div>
+      ) : null}
+
+      {/* Wild colour choice requested by the server */}
+      {mustPickColor ? (
+        <Overlay title="Pick your poison">
+          <div className="grid grid-cols-2 gap-3">
+            {COLOR_CHOICES.map((c) => (
+              <button
+                key={c.color}
+                type="button"
+                onClick={() => onChooseColor(c.color)}
+                className="h-20 rounded-2xl border-[3px] border-white/80 font-display text-sm uppercase tracking-widest text-white"
+                style={{ background: c.css, boxShadow: "var(--shadow-card)" }}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </Overlay>
+      ) : null}
+
+      {/* Seven: choose whose hand to steal */}
+      {mustPickTarget ? (
+        <Overlay title="Swap hands with">
+          <div className="flex flex-col gap-2">
+            {opponents
+              .filter((p) => !p.eliminated)
+              .map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => onChooseSwapTarget(p.id)}
+                  className="panel flex items-center justify-between px-4 py-3 font-display text-sm uppercase tracking-widest"
+                >
+                  <span>{p.nickname}</span>
+                  <span className="text-[var(--ono-yellow)]">{p.card_count} cards</span>
+                </button>
+              ))}
+          </div>
+        </Overlay>
+      ) : null}
+
       <div className="flex items-center justify-between gap-2 px-3 pb-3">{footer}</div>
     </div>
+
+  );
+}
+
+function Overlay({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="fixed inset-0 z-40 grid place-items-center bg-background/85 px-6 backdrop-blur-sm"
+    >
+      <motion.div
+        initial={{ scale: 0.9, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        className="panel w-full max-w-sm space-y-4 p-5"
+      >
+        <p className="text-center font-display text-sm uppercase tracking-[0.25em] text-[var(--ono-yellow)]">
+          {title}
+        </p>
+        {children}
+      </motion.div>
+    </motion.div>
   );
 }

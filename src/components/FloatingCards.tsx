@@ -3,15 +3,16 @@ import { GameCard } from "./Card";
 import type { Card } from "@/game/gameTypes";
 
 const DECOR: Card[] = [
-  { id: "d1", color: "red", kind: "number", value: 7 },
-  { id: "d2", color: "yellow", kind: "skip" },
-  { id: "d3", color: "blue", kind: "draw2" },
-  { id: "d4", color: "green", kind: "number", value: 4 },
-  { id: "d5", color: "wild", kind: "draw10" },
-  { id: "d6", color: "red", kind: "reverse" },
-  { id: "d7", color: "blue", kind: "number", value: 9 },
-  { id: "d8", color: "wild", kind: "wild" },
+  { id: "d1", color: "red", type: "number", value: 7 },
+  { id: "d2", color: "yellow", type: "skip" },
+  { id: "d3", color: "blue", type: "draw2" },
+  { id: "d4", color: "green", type: "number", value: 4 },
+  { id: "d5", color: "wild", type: "wilddraw10" },
+  { id: "d6", color: "red", type: "reverse" },
+  { id: "d7", color: "blue", type: "number", value: 9 },
+  { id: "d8", color: "wild", type: "wildroulette" },
 ];
+
 
 const POSITIONS = [
   { left: "6%", top: "14%", r: -18, s: 1 },
