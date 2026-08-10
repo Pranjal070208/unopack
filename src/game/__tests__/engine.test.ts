@@ -199,8 +199,9 @@ describe("draw stacking", () => {
     expect(state.drawStack.totalPenalty).toBe(22);
     expect(state.currentPlayerId).toBe("p5");
 
-    state = applyCommand(state, { type: "DRAW_CARD", playerId: "p5" }).state;
-    expect(state.hands["p5"]).toHaveLength(25 - 0);
+    const resolved = applyCommand(state, { type: "DRAW_CARD", playerId: "p5" });
+    state = resolved.state;
+    expect(resolved.events.find((e) => e.type === "DRAW_STACK_RESOLVED")?.data?.["count"]).toBe(22);
     // 3 filler + 22 penalty = 25 -> mercy rule
     expect(state.players.find((p) => p.id === "p5")?.eliminated).toBe(true);
     expect(state.drawStack.active).toBe(false);
