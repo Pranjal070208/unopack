@@ -6,7 +6,7 @@ const identity = z.object({ playerId: z.string().uuid(), secret: z.string().min(
 const profile = z.object({
   nickname: z.string().trim().min(1).max(16),
   avatar: z.string().trim().min(1).max(24),
-  sessionId: z.string().min(8).max(64),
+  sessionId: z.string().min(8).max(128),
 });
 
 export const createRoom = createServerFn({ method: "POST" })
