@@ -43,37 +43,53 @@ export const Route = createFileRoute("/room/$code")({
   component: RoomPage,
 });
 
+const PLAY_EFFECTS: Record<string, { text: string; tone: Effect["tone"] }> = {
+  skip: { text: "SKIPPED!", tone: "yellow" },
+  reverse: { text: "REVERSE!", tone: "yellow" },
+  draw2: { text: "+2!", tone: "yellow" },
+  draw4: { text: "+4!", tone: "red" },
+  skipall: { text: "SKIP EVERYONE!", tone: "yellow" },
+  discardall: { text: "DISCARD ALL!", tone: "green" },
+  wildreversedraw4: { text: "REVERSE +4!", tone: "red" },
+  wilddraw6: { text: "+6!", tone: "red" },
+  wilddraw10: { text: "+10 NO MERCY!", tone: "red" },
+  wildroulette: { text: "COLOR ROULETTE!", tone: "blue" },
+};
+
 function effectFor(e: EventRow): Effect | null {
-  const data = e.event_data as { card?: { kind?: string; color?: string }; count?: number; nickname?: string };
+  const data = e.event_data as { card?: { type?: string; value?: number }; count?: number };
   switch (e.event_type) {
-    case "play": {
-      const kind = data.card?.kind;
-      if (!kind || kind === "number") return null;
-      const map: Record<string, string> = {
-        skip: "SKIPPED!",
-        reverse: "REVERSE!",
-        draw2: "+2!",
-        draw4: "+4!",
-        draw6: "+6!",
-        draw10: "+10 NO MERCY!",
-        reversedraw4: "REVERSE +4!",
-        skipall: "SKIP EVERYONE!",
-        discardall: "DISCARD ALL!",
-        wild: "WILD!",
-      };
-      const text = map[kind];
-      return text ? { id: e.id, text, tone: kind === "draw10" ? "red" : "yellow" } : null;
+    case "CARD_PLAYED": {
+      const type = data.card?.type;
+      if (!type) return null;
+      if (type === "number" && data.card?.value === 7) return { id: e.id, text: "SWAP!", tone: "green" };
+      if (type === "number" && data.card?.value === 0) return { id: e.id, text: "PASS 'EM ALL!", tone: "green" };
+      const fx = PLAY_EFFECTS[type];
+      return fx ? { id: e.id, text: fx.text, tone: fx.tone } : null;
     }
-    case "eliminated":
+    case "HAND_SWAPPED":
+      return { id: e.id, text: "HANDS SWAPPED!", tone: "green" };
+    case "HANDS_ROTATED":
+      return { id: e.id, text: "EVERYONE PASSES!", tone: "green" };
+    case "DRAW_STACK_RESOLVED":
+      return { id: e.id, text: `TAKE ${Number(data.count ?? 0)}!`, tone: "red" };
+    case "UNO_CALLED":
+      return { id: e.id, text: "ONO!", tone: "yellow" };
+    case "UNO_CAUGHT":
+      return { id: e.id, text: "CAUGHT! +2", tone: "red" };
+    case "PLAYER_ELIMINATED":
       return { id: e.id, text: "ELIMINATED!", tone: "red" };
-    case "timeout":
+    case "TURN_TIMEOUT":
       return { id: e.id, text: "TOO SLOW!", tone: "red" };
-    case "shuffle":
+    case "DECK_RESHUFFLED":
       return { id: e.id, text: "RESHUFFLE", tone: "blue" };
+    case "PLAYER_WON":
+      return { id: e.id, text: "WINNER!", tone: "yellow" };
     default:
       return null;
   }
 }
+
 
 function RoomPage() {
   const { code } = Route.useParams();
