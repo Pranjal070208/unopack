@@ -109,9 +109,9 @@ export const getMyHand = createServerFn({ method: "POST" })
     const game = await s.currentGame(db, player.room_id);
     if (!game) return { hand: [] as Card[], playable: [] as string[], gameId: null as string | null };
     const { state } = await s.loadState(db, game.id);
-    const { playableCardIds } = await import("@/game/rules");
+    const { playableCardIds } = await import("@/game/playability");
     const hand = state.hands[player.id] ?? [];
-    const playable = state.currentPlayerId === player.id ? playableCardIds(state, hand) : [];
+    const playable = playableCardIds(state, player.id);
     return { hand, playable, gameId: game.id as string };
   });
 
@@ -125,41 +125,44 @@ export const startGame = createServerFn({ method: "POST" })
     return { gameId: game.id as string };
   });
 
-export const playCardFn = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
-    identity
-      .extend({
-        cardId: z.string().min(1).max(64),
-        color: z.enum(["red", "yellow", "green", "blue"]).optional(),
-      })
-      .parse(d),
-  )
-  .handler(async ({ data }) => {
-    const s = await import("./game.server");
-    const engine = await import("@/game/gameEngine");
-    const { db, player } = await s.authPlayer(data.playerId, data.secret);
-    const game = await s.currentGame(db, player.room_id);
-    if (!game) throw new Error("NO_GAME");
-    const { state } = await s.loadState(db, game.id);
-    const result = engine.playCard(state, player.id, data.cardId, data.color);
-    await s.saveState(db, game.id, player.room_id, result.state);
-    await s.logEvents(db, player.room_id, game.id, result.events);
-    return { ok: true };
-  });
+const commandSchema = identity.extend({
+  actionId: z.string().min(6).max(64),
+  command: z.discriminatedUnion("type", [
+    z.object({
+      type: z.literal("PLAY_CARD"),
+      cardId: z.string().min(1).max(64),
+      color: z.enum(["red", "yellow", "green", "blue"]).optional(),
+      targetId: z.string().uuid().optional(),
+    }),
+    z.object({ type: z.literal("DRAW_CARD") }),
+    z.object({ type: z.literal("CHOOSE_COLOR"), color: z.enum(["red", "yellow", "green", "blue"]) }),
+    z.object({ type: z.literal("CHOOSE_SWAP_TARGET"), targetId: z.string().uuid() }),
+    z.object({ type: z.literal("CALL_UNO") }),
+    z.object({ type: z.literal("CATCH_UNO"), targetId: z.string().uuid() }),
+  ]),
+});
 
-export const drawCardFn = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => identity.parse(d))
+/** The one authoritative mutation endpoint. Every rule is enforced here. */
+export const sendCommand = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => commandSchema.parse(d))
   .handler(async ({ data }) => {
     const s = await import("./game.server");
-    const engine = await import("@/game/gameEngine");
+    const engine = await import("@/game/engine");
     const { db, player } = await s.authPlayer(data.playerId, data.secret);
     const game = await s.currentGame(db, player.room_id);
     if (!game) throw new Error("NO_GAME");
     const { state } = await s.loadState(db, game.id);
-    const result = engine.drawCard(state, player.id);
+
+    const result = engine.applyCommand(state, {
+      ...data.command,
+      playerId: player.id,
+      actionId: data.actionId,
+    } as never);
+
+    if (result.events.length === 0 && result.state === state) return { ok: true, duplicate: true };
     await s.saveState(db, game.id, player.room_id, result.state);
     await s.logEvents(db, player.room_id, game.id, result.events);
-    return { ok: true };
+    return { ok: true, duplicate: false };
   });
 
 /** Anyone in the room may ask the server to enforce an expired turn. */
@@ -167,21 +170,25 @@ export const enforceTimeout = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => identity.parse(d))
   .handler(async ({ data }) => {
     const s = await import("./game.server");
-    const engine = await import("@/game/gameEngine");
+    const engine = await import("@/game/engine");
+    const { GAME_CONFIG } = await import("@/game/config");
     const { db, player } = await s.authPlayer(data.playerId, data.secret);
     const game = await s.currentGame(db, player.room_id);
     if (!game || game.status !== "playing" || !game.current_player_id) return { ok: false };
     const elapsed = Date.now() - new Date(game.turn_started_at).getTime();
-    if (elapsed < 36000) return { ok: false };
+    if (elapsed < (GAME_CONFIG.TURN_SECONDS + 2) * 1000) return { ok: false };
     const { state } = await s.loadState(db, game.id);
-    const result = engine.drawCard(state, game.current_player_id);
+    const result = engine.applyCommand(state, {
+      type: "TIMEOUT",
+      playerId: game.current_player_id,
+      actionId: `timeout_${game.turn_count}`,
+    });
+    if (result.events.length === 0) return { ok: false };
     await s.saveState(db, game.id, player.room_id, result.state);
-    await s.logEvents(db, player.room_id, game.id, [
-      { type: "timeout", playerId: game.current_player_id },
-      ...result.events,
-    ]);
+    await s.logEvents(db, player.room_id, game.id, result.events);
     return { ok: true };
   });
+
 
 export const sendRoomEvent = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
