@@ -34,6 +34,19 @@ export async function authPlayer(playerId: string, secret: string) {
   return { db, player: player as Row };
 }
 
+/**
+ * game_events is a public, room-scoped log. Strip anything that would let a
+ * spectator or opponent learn hidden state (the RNG seed, or the identity of a
+ * card that only its owner should see).
+ */
+function sanitizeEventData(type: string, data: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...data };
+  delete out["seed"];
+  if (type === "CARD_DRAWN" || type === "DRAW_STACK_RESOLVED") delete out["card"];
+  if (type === "DISCARD_ALL_RESOLVED") delete out["cards"];
+  return out;
+}
+
 export async function logEvents(
   db: any,
   roomId: string,
@@ -47,7 +60,7 @@ export async function logEvents(
       game_id: gameId,
       player_id: e.playerId ?? null,
       event_type: e.type,
-      event_data: (e.data ?? {}) as Record<string, unknown>,
+      event_data: sanitizeEventData(e.type, (e.data ?? {}) as Record<string, unknown>),
     })),
   );
 }
