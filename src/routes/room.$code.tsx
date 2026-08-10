@@ -127,11 +127,12 @@ function RoomPage() {
       if (e.event_type === "player_join") setNotice(`${data.nickname ?? "SOMEONE"} JOINED`);
       if (e.event_type === "player_leave") setNotice(`${data.nickname ?? "SOMEONE"} LEFT`);
       if (e.event_type === "player_kick") setNotice(`${data.nickname ?? "SOMEONE"} WAS KICKED`);
-      if (e.event_type === "play") playSound(effectFor(e) ? "special" : "play");
-      if (e.event_type === "draw") playSound("draw");
-      if (e.event_type === "eliminated") playSound("lose");
-      if (e.event_type === "game_over") playSound("win");
-      if (e.event_type === "game_start") playSound("turn");
+      if (e.event_type === "CARD_PLAYED") playSound(effectFor(e) ? "special" : "play");
+      if (e.event_type === "CARD_DRAWN" || e.event_type === "DRAW_STACK_RESOLVED") playSound("draw");
+      if (e.event_type === "PLAYER_ELIMINATED") playSound("lose");
+      if (e.event_type === "GAME_ENDED" || e.event_type === "PLAYER_WON") playSound("win");
+      if (e.event_type === "GAME_STARTED") playSound("turn");
+
       const fx = effectFor(e);
       if (fx) setEffect(fx);
     }
