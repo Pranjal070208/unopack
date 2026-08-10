@@ -192,7 +192,70 @@ export function GameTable({
         />
       </div>
 
+      {/* UNO shout / catch */}
+      {canCallUno || catchTarget ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 flex justify-center">
+          <motion.button
+            type="button"
+            initial={{ scale: 0.7, opacity: 0 }}
+            animate={{ scale: [1, 1.06, 1], opacity: 1 }}
+            transition={{ duration: 0.9, repeat: Infinity }}
+            onClick={() => (canCallUno ? onCallUno() : catchTarget && onCatchUno(catchTarget))}
+            className="pointer-events-auto rounded-full border-[3px] border-white/80 px-7 py-3 font-display text-lg uppercase tracking-[0.2em] text-white"
+            style={{
+              background: canCallUno ? "var(--ono-yellow)" : "var(--ono-red)",
+              boxShadow: "var(--shadow-card)",
+            }}
+          >
+            {canCallUno
+              ? "Call ONO!"
+              : `Catch ${players.find((p) => p.id === catchTarget)?.nickname ?? "them"}!`}
+          </motion.button>
+        </div>
+      ) : null}
+
+      {/* Wild colour choice requested by the server */}
+      {mustPickColor ? (
+        <Overlay title="Pick your poison">
+          <div className="grid grid-cols-2 gap-3">
+            {COLOR_CHOICES.map((c) => (
+              <button
+                key={c.color}
+                type="button"
+                onClick={() => onChooseColor(c.color)}
+                className="h-20 rounded-2xl border-[3px] border-white/80 font-display text-sm uppercase tracking-widest text-white"
+                style={{ background: c.css, boxShadow: "var(--shadow-card)" }}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </Overlay>
+      ) : null}
+
+      {/* Seven: choose whose hand to steal */}
+      {mustPickTarget ? (
+        <Overlay title="Swap hands with">
+          <div className="flex flex-col gap-2">
+            {opponents
+              .filter((p) => !p.eliminated)
+              .map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => onChooseSwapTarget(p.id)}
+                  className="panel flex items-center justify-between px-4 py-3 font-display text-sm uppercase tracking-widest"
+                >
+                  <span>{p.nickname}</span>
+                  <span className="text-[var(--ono-yellow)]">{p.card_count} cards</span>
+                </button>
+              ))}
+          </div>
+        </Overlay>
+      ) : null}
+
       <div className="flex items-center justify-between gap-2 px-3 pb-3">{footer}</div>
     </div>
+
   );
 }
