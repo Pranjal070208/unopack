@@ -164,10 +164,21 @@ function RoomPage() {
     [creds],
   );
 
+  /** Every game move goes through the single authoritative command endpoint. */
+  const cmd = useCallback(
+    (command: Record<string, unknown>) =>
+      act(sendCommand as never, {
+        command,
+        actionId: `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`,
+      }),
+    [act],
+  );
+
   const onTimeout = useCallback(() => {
     if (!creds) return;
     void enforceTimeout({ data: creds }).catch(() => undefined);
   }, [creds]);
+
 
   const handleLeave = async () => {
     await act(leaveRoom as never);
