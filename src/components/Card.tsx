@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import type { Card as CardType } from "@/game/gameTypes";
-import { CARD_LABEL } from "@/game/gameTypes";
+import { cardFace } from "@/game/cardTypes";
 import { cn } from "@/lib/utils";
 
 const COLOR_VAR: Record<string, string> = {
@@ -18,9 +18,8 @@ const SIZES = {
   xl: "w-[120px] h-[176px] text-3xl",
 };
 
-export function cardFace(card: CardType): string {
-  return card.kind === "number" ? String(card.value ?? 0) : CARD_LABEL[card.kind];
-}
+export { cardFace };
+
 
 interface CardProps {
   card: CardType;
