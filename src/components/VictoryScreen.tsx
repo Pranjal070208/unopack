@@ -39,12 +39,13 @@ export function VictoryScreen({ players, winnerId, events, isHost, onPlayAgain, 
   const winner = players.find((p) => p.id === winnerId);
 
   const stats = useMemo(() => {
-    const plays = events.filter((e) => e.event_type === "play");
-    const draws = events.filter((e) => e.event_type === "draw");
+    const plays = events.filter((e) => e.event_type === "CARD_PLAYED");
+    const draws = events.filter((e) => e.event_type === "CARD_DRAWN" || e.event_type === "DRAW_STACK_RESOLVED");
     const specials = plays.filter((e) => {
-      const card = (e.event_data as { card?: { kind?: string } }).card;
-      return card?.kind && card.kind !== "number";
+      const card = (e.event_data as { card?: { type?: string } }).card;
+      return !!card?.type && card.type !== "number";
     });
+
     const biggestDraw = draws.reduce((max, e) => Math.max(max, Number((e.event_data as { count?: number }).count ?? 0)), 0);
     const savage = specials.reduce<Record<string, number>>((acc, e) => {
       if (e.player_id) acc[e.player_id] = (acc[e.player_id] ?? 0) + 1;
