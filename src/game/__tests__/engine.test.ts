@@ -17,7 +17,7 @@ function newGame(count: number, seed = 42) {
 /** Deterministic table: everyone empty-handed, plain red 5 on top. */
 function table(count: number, opts: Partial<GameState> = {}): GameState {
   const state = newGame(count);
-  for (const p of state.players) state.hands[p.id] = [];
+  for (const p of state.players) state.hands[p.id] = filler(p.id, 3);
   state.discardTop = card("top_red5", "red", "number", 5);
   state.pile = [state.discardTop];
   state.currentColor = "red";
