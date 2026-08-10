@@ -1,5 +1,7 @@
-import type { Card, GameState } from "@/game/gameTypes";
-import { dealCards } from "@/game/gameEngine";
+import type { GameState } from "@/game/gameTypes";
+import { createGame, toPublicState } from "@/game/engine";
+import { makeSeed } from "@/game/rng";
+import { GAME_CONFIG } from "@/game/config";
 
 type Row = any;
 
@@ -45,72 +47,51 @@ export async function logEvents(
       game_id: gameId,
       player_id: e.playerId ?? null,
       event_type: e.type,
-      event_data: e.data ?? {},
+      event_data: (e.data ?? {}) as Record<string, unknown>,
     })),
   );
 }
 
+/** Load the full authoritative state. Only ever runs on the server. */
 export async function loadState(db: any, gameId: string): Promise<{ game: Row; state: GameState }> {
   const { data: game } = await db.from("games").select("*").eq("id", gameId).maybeSingle();
   if (!game) throw new Error("GAME_NOT_FOUND");
-  const { data: priv } = await db.from("game_private").select("*").eq("game_id", gameId).maybeSingle();
-  const { data: players } = await db.from("players").select("*").eq("room_id", game.room_id).order("seat");
-
-  const state: GameState = {
-    players: (players ?? []).map((p: Row) => ({
-      id: p.id,
-      seat: p.seat,
-      eliminated: p.eliminated,
-      finishedRank: p.finished_rank,
-    })),
-    hands: (priv?.hands ?? {}) as Record<string, Card[]>,
-    deck: (priv?.deck ?? []) as Card[],
-    pile: (priv?.pile ?? []) as Card[],
-    discardTop: game.discard_top as Card | null,
-    activeColor: game.active_color,
-    currentPlayerId: game.current_player_id,
-    direction: game.direction === -1 ? -1 : 1,
-    pendingDraw: game.pending_draw,
-    turnCount: game.turn_count,
-    winnerId: game.winner_id,
-    status: game.status === "finished" ? "finished" : "playing",
-  };
+  const { data: priv } = await db.from("game_private").select("full_state").eq("game_id", gameId).maybeSingle();
+  const state = priv?.full_state as GameState | undefined;
+  if (!state || !state.players) throw new Error("STATE_MISSING");
   return { game, state };
 }
 
 export async function saveState(db: any, gameId: string, roomId: string, state: GameState) {
+  const pub = toPublicState(state);
+
   await db
     .from("games")
     .update({
       status: state.status,
+      phase: state.phase,
       current_player_id: state.currentPlayerId,
       direction: state.direction,
-      pending_draw: state.pendingDraw,
+      pending_draw: state.drawStack.totalPenalty,
       discard_top: state.discardTop,
-      active_color: state.activeColor,
+      active_color: state.currentColor,
       turn_count: state.turnCount,
       winner_id: state.winnerId,
+      public_state: pub,
       turn_started_at: new Date().toISOString(),
     })
     .eq("id", gameId);
 
-  await db.from("game_private").update({ deck: state.deck, pile: state.pile, hands: state.hands }).eq("game_id", gameId);
+  await db.from("game_private").update({ full_state: state, hands: {}, deck: [], pile: [] }).eq("game_id", gameId);
 
-  // Rank finishers, then sync public per-player counters.
-  const ranked = state.players
-    .filter((p) => p.finishedRank !== null)
-    .sort((a, b) => (a.finishedRank ?? 0) - (b.finishedRank ?? 0)).length;
-  let nextRank = ranked + 1;
   for (const p of state.players) {
-    const count = state.hands[p.id]?.length ?? 0;
-    let rank = p.finishedRank;
-    if (rank === null && count === 0 && state.status === "finished") {
-      rank = nextRank;
-      nextRank += 1;
-    }
     await db
       .from("players")
-      .update({ card_count: count, eliminated: p.eliminated, finished_rank: rank })
+      .update({
+        card_count: state.hands[p.id]?.length ?? 0,
+        eliminated: p.eliminated,
+        finished_rank: p.finishedRank,
+      })
       .eq("id", p.id);
   }
 
@@ -120,13 +101,10 @@ export async function saveState(db: any, gameId: string, roomId: string, state: 
 }
 
 export async function startNewGame(db: any, roomId: string) {
-  const { data: players } = await db
-    .from("players")
-    .select("*")
-    .eq("room_id", roomId)
-    .order("joined_at");
+  const { data: players } = await db.from("players").select("*").eq("room_id", roomId).order("joined_at");
   const list = (players ?? []) as Row[];
-  if (list.length < 2) throw new Error("NEED_MORE_PLAYERS");
+  if (list.length < GAME_CONFIG.MIN_PLAYERS) throw new Error("NEED_MORE_PLAYERS");
+  if (list.length > GAME_CONFIG.MAX_PLAYERS) throw new Error("TOO_MANY_PLAYERS");
 
   for (let i = 0; i < list.length; i++) {
     await db
@@ -135,38 +113,48 @@ export async function startNewGame(db: any, roomId: string) {
       .eq("id", list[i]!.id);
   }
 
-  const state = dealCards(
-    list.map((p, i) => ({ id: p.id, seat: i, eliminated: false, finishedRank: null })),
+  const seed = makeSeed();
+  const { state, events } = createGame(
+    list.map((p) => p.id as string),
+    seed,
   );
+  const pub = toPublicState(state);
 
   const { data: game } = await db
     .from("games")
     .insert({
       room_id: roomId,
-      status: "playing",
+      status: state.status,
+      phase: state.phase,
+      seed,
       current_player_id: state.currentPlayerId,
-      direction: 1,
-      pending_draw: 0,
+      direction: state.direction,
+      pending_draw: state.drawStack.totalPenalty,
       discard_top: state.discardTop,
-      active_color: state.activeColor,
+      active_color: state.currentColor,
       turn_count: 0,
+      public_state: pub,
     })
     .select()
     .single();
 
   await db.from("game_private").insert({
     game_id: game.id,
-    deck: state.deck,
-    pile: state.pile,
-    hands: state.hands,
+    deck: [],
+    pile: [],
+    hands: {},
+    full_state: state,
   });
 
   for (const p of state.players) {
-    await db.from("players").update({ card_count: state.hands[p.id]?.length ?? 0 }).eq("id", p.id);
+    await db
+      .from("players")
+      .update({ card_count: state.hands[p.id]?.length ?? 0 })
+      .eq("id", p.id);
   }
 
   await db.from("rooms").update({ status: "playing" }).eq("id", roomId);
-  await logEvents(db, roomId, game.id, [{ type: "game_start" }]);
+  await logEvents(db, roomId, game.id, events);
   return game as Row;
 }
 
