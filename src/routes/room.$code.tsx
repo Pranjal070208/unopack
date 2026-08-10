@@ -43,7 +43,7 @@ export const Route = createFileRoute("/room/$code")({
   component: RoomPage,
 });
 
-const PLAY_EFFECTS: Record<string, { text: string; tone: Effect["tone"] }> = {
+const PLAY_EFFECTS: Record<string, { text: string; tone: NonNullable<Effect["tone"]> }> = {
   skip: { text: "SKIPPED!", tone: "yellow" },
   reverse: { text: "REVERSE!", tone: "yellow" },
   draw2: { text: "+2!", tone: "yellow" },
@@ -65,7 +65,8 @@ function effectFor(e: EventRow): Effect | null {
       if (type === "number" && data.card?.value === 7) return { id: e.id, text: "SWAP!", tone: "green" };
       if (type === "number" && data.card?.value === 0) return { id: e.id, text: "PASS 'EM ALL!", tone: "green" };
       const fx = PLAY_EFFECTS[type];
-      return fx ? { id: e.id, text: fx.text, tone: fx.tone } : null;
+      if (!fx) return null;
+      return { id: e.id, text: fx.text, tone: fx.tone };
     }
     case "HAND_SWAPPED":
       return { id: e.id, text: "HANDS SWAPPED!", tone: "green" };
