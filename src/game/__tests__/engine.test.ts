@@ -151,7 +151,7 @@ describe("playability", () => {
 describe("draw stacking", () => {
   const stackCase = (first: Card, second: Card) => {
     const state = table(3);
-    state.hands["p1"] = [first];
+    state.hands["p1"] = [first, ...filler("p1", 2)];
     state.hands["p2"] = [second, ...filler("p2", 3)];
     const afterFirst = applyCommand(state, { type: "PLAY_CARD", playerId: "p1", cardId: first.id, color: "red" }).state;
     return { afterFirst, verdict: isPlayableCard(second, afterFirst, "p2") };
@@ -183,10 +183,10 @@ describe("draw stacking", () => {
 
   it("accumulates the penalty and dumps it on the player who cannot stack", () => {
     let state = table(5);
-    state.hands["p1"] = [card("c1", "red", "draw2")];
-    state.hands["p2"] = [card("c2", "blue", "draw4")];
-    state.hands["p3"] = [card("c3", "wild", "wilddraw6")];
-    state.hands["p4"] = [card("c4", "wild", "wilddraw10")];
+    state.hands["p1"] = [card("c1", "red", "draw2"), ...filler("p1", 2)];
+    state.hands["p2"] = [card("c2", "blue", "draw4"), ...filler("p2", 2)];
+    state.hands["p3"] = [card("c3", "wild", "wilddraw6"), ...filler("p3", 2)];
+    state.hands["p4"] = [card("c4", "wild", "wilddraw10"), ...filler("p4", 2)];
     state.hands["p5"] = filler("p5", 3);
 
     state = applyCommand(state, { type: "PLAY_CARD", playerId: "p1", cardId: "c1" }).state;
@@ -208,8 +208,8 @@ describe("draw stacking", () => {
 
   it("keeps the colour chosen on the last wild draw card of a stack", () => {
     let state = table(3);
-    state.hands["p1"] = [card("c1", "red", "draw2")];
-    state.hands["p2"] = [card("c2", "wild", "wilddraw6")];
+    state.hands["p1"] = [card("c1", "red", "draw2"), ...filler("p1", 2)];
+    state.hands["p2"] = [card("c2", "wild", "wilddraw6"), ...filler("p2", 2)];
     state.hands["p3"] = filler("p3", 2);
     state = applyCommand(state, { type: "PLAY_CARD", playerId: "p1", cardId: "c1" }).state;
     state = applyCommand(state, { type: "PLAY_CARD", playerId: "p2", cardId: "c2", color: "green" }).state;
@@ -364,7 +364,7 @@ describe("zero rotation", () => {
 
   it("checks the mercy rule only after every hand has moved", () => {
     const state = table(3);
-    state.hands["p1"] = [card("zero", "red", "number", 0), ...filler("p1", 24)];
+    state.hands["p1"] = [card("zero", "red", "number", 0), ...filler("p1", 25)];
     state.hands["p2"] = filler("p2", 3);
     state.hands["p3"] = filler("p3", 3);
     const next = applyCommand(state, { type: "PLAY_CARD", playerId: "p1", cardId: "zero" }).state;
@@ -436,8 +436,8 @@ describe("wild color roulette", () => {
 
   it("cannot be used to stack on a draw penalty", () => {
     let state = table(3);
-    state.hands["p1"] = [card("d", "red", "draw2")];
-    state.hands["p2"] = [card("wr", "wild", "wildroulette")];
+    state.hands["p1"] = [card("d", "red", "draw2"), ...filler("p1", 2)];
+    state.hands["p2"] = [card("wr", "wild", "wildroulette"), ...filler("p2", 2)];
     state = applyCommand(state, { type: "PLAY_CARD", playerId: "p1", cardId: "d" }).state;
     expect(isPlayableCard(state.hands["p2"]![0]!, state, "p2").playable).toBe(false);
   });
@@ -499,13 +499,11 @@ describe("winning", () => {
 
   it("wins as the last player standing", () => {
     const state = table(3);
-    state.hands["p1"] = [card("x", "green", "number", 1), ...filler("p1", 3)];
-    state.hands["p2"] = filler("p2", 24);
-    state.hands["p3"] = filler("p3", 24);
     state.players.find((p) => p.id === "p3")!.eliminated = true;
-    state.hands["p1"] = [card("zero", "red", "number", 0), ...filler("p1", 24)];
+    state.hands["p2"] = filler("p2", 3);
+    state.hands["p1"] = [card("zero", "red", "number", 0), ...filler("p1", 25)];
     const next = applyCommand(state, { type: "PLAY_CARD", playerId: "p1", cardId: "zero" }).state;
-    // p2 receives 24 cards from p1 -> eliminated, leaving p1 alone
+    // p2 receives 25 cards from p1 -> eliminated, leaving p1 alone
     expect(next.status).toBe("finished");
     expect(next.winnerId).toBe("p1");
   });
