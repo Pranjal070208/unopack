@@ -296,9 +296,10 @@ function RoomPage() {
           playable={room.playable}
           reactions={reactions}
           onPlay={(cardId, color) =>
-            void act(playCardFn as never, color ? { cardId, color } : { cardId })
+            void cmd(color ? { type: "PLAY_CARD", cardId, color } : { type: "PLAY_CARD", cardId })
           }
-          onDraw={() => void act(drawCardFn as never)}
+          onDraw={() => void cmd({ type: "DRAW_CARD" })}
+
           onTimeout={onTimeout}
           header={statusBar}
           footer={
