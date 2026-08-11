@@ -632,6 +632,29 @@ function chooseSwapTarget(state: GameState, playerId: string, targetId: string, 
   );
 }
 
+/**
+ * Wild Color Roulette: the VICTIM (next player) names a colour, then reveals
+ * cards until that colour appears, keeps every revealed card and loses the turn.
+ */
+function chooseRouletteColor(state: GameState, playerId: string, color: CardColor, events: GameEvent[]): void {
+  const pending = state.pending;
+  if (!pending || pending.kind !== "roulette") throw new Error("NO_ROULETTE_PENDING");
+  if (pending.playerId !== playerId) throw new Error("NOT_YOUR_CHOICE");
+  const source = pending.sourcePlayerId ?? state.currentPlayerId ?? playerId;
+
+  state.pending = null;
+  resolveColorRoulette(state, playerId, color, events);
+  checkMercyRule(state, events, source);
+  if (checkWinConditions(state, events)) return;
+
+  events.push({ type: "PLAYER_SKIPPED", playerId });
+  state.currentPlayerId = nextPlayerId(state, source, 2);
+  state.turnCount += 1;
+  state.phase = "PLAYER_TURN";
+  expireUnoWindow(state);
+}
+
+
 function callUno(state: GameState, playerId: string, events: GameEvent[]): void {
   const uno = state.uno;
   if (!uno || uno.playerId !== playerId) throw new Error("NO_UNO_PENDING");
