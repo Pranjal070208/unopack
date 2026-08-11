@@ -226,57 +226,34 @@ export function createGame(playerIds: string[], seed: number = makeSeed()): Comm
 }
 
 /**
- * Flip the opening card. Wilds and Wild Color Roulette are returned to the deck
- * and a new card is flipped (the deck cannot choose a colour). A colour action
- * card takes effect against the first player exactly as if it had been played.
+ * Flip the opening card. Per the official sheet, if the revealed card is an
+ * Action card it is ignored and the next card is flipped, so play always opens
+ * on a plain number card.
  */
 export function initializeDiscardPile(state: GameState, events: GameEvent[]): void {
   let first: Card | undefined;
+  const buried: Card[] = [];
   for (let guard = 0; guard < GAME_CONFIG.MAX_REVEAL_ITERATIONS; guard++) {
     const candidate = takeFromDeck(state, 1, events)[0];
     if (!candidate) break;
-    if (isWild(candidate)) {
-      // Bury wilds back into the deck and flip again.
-      state.deck.push(candidate);
+    if (candidate.type !== "number") {
+      buried.push(candidate);
       continue;
     }
     first = candidate;
     break;
   }
+  // Ignored action cards go back into the draw pile.
+  if (buried.length) {
+    const rng = rngOf(state);
+    state.deck = shuffleDeck(state.deck.concat(buried), rng);
+    commitRng(state, rng);
+  }
   if (!first) return;
 
   state.pile = [first];
   state.discardTop = first;
-  state.currentColor = first.color === "wild" ? "red" : first.color;
-
-  const opener = state.currentPlayerId;
-  if (!opener) return;
-
-  switch (first.type) {
-    case "skip":
-      events.push({ type: "PLAYER_SKIPPED", playerId: opener, data: { byOpeningCard: true } });
-      state.currentPlayerId = nextPlayerId(state, opener, 1);
-      break;
-    case "skipall":
-      events.push({ type: "EVERYONE_SKIPPED", data: { byOpeningCard: true } });
-      break;
-    case "reverse": {
-      state.direction = state.direction === 1 ? -1 : 1;
-      events.push({ type: "DIRECTION_REVERSED", data: { byOpeningCard: true } });
-      const live = activePlayers(state);
-      state.currentPlayerId = live.length === 2 ? opener : nextPlayerId(state, opener, live.length - 1);
-      break;
-    }
-    case "draw2":
-    case "draw4": {
-      const amount = drawValue(first);
-      state.drawStack = { active: true, totalPenalty: amount, lastCardValue: amount, initiatorId: null };
-      events.push({ type: "DRAW_STACK_STARTED", data: { amount, total: amount, byOpeningCard: true } });
-      break;
-    }
-    default:
-      break;
-  }
+  state.currentColor = first.color as CardColor;
 }
 
 /* -------------------------------------------------------------------------- */
