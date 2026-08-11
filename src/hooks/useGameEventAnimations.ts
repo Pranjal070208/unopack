@@ -45,6 +45,7 @@ export function useGameEventAnimations({ events, players, myId }: Options) {
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [reactions, setReactions] = useState<Record<string, string>>({});
+  const [bursts, setBursts] = useState<{ id: number; nickname: string; emoji: string }[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
 
   const queue = useRef<Announcement[]>([]);
@@ -296,8 +297,12 @@ export function useGameEventAnimations({ events, players, myId }: Options) {
 
       if (e.event_type === "reaction" && e.player_id) {
         const pid = e.player_id;
-        setReactions((r) => ({ ...r, [pid]: String(data.text ?? "🔥") }));
+        const emoji = String(data.text ?? "🔥");
+        setReactions((r) => ({ ...r, [pid]: emoji }));
         window.setTimeout(() => setReactions((r) => ({ ...r, [pid]: "" })), 2000);
+        const nickname = data.nickname ?? nameOf(pid);
+        setBursts((b) => [...b.slice(-5), { id: e.id, nickname, emoji }]);
+        window.setTimeout(() => setBursts((b) => b.filter((x) => x.id !== e.id)), 2200);
         continue;
       }
       if (e.event_type === "player_join") {
@@ -323,7 +328,7 @@ export function useGameEventAnimations({ events, players, myId }: Options) {
         // Presentation failures must never stall the authoritative game.
       }
     }
-  }, [events, map, announce, pushFeed]);
+  }, [events, map, announce, pushFeed, nameOf]);
 
   useEffect(() => {
     if (!notice) return;
@@ -344,5 +349,5 @@ export function useGameEventAnimations({ events, players, myId }: Options) {
     [events],
   );
 
-  return { announcement, feed, reactions, notice, chat, announce };
+  return { announcement, feed, reactions, bursts, notice, chat, announce };
 }
