@@ -430,7 +430,13 @@ function finishPlay(state: GameState, ctx: PlayCtx, events: GameEvent[]): void {
   // UNO window opens for the player who just played down to one card.
   const myCount = state.hands[playerId]?.length ?? 0;
   if (myCount === GAME_CONFIG.UNO_REQUIRED_AT) {
-    state.uno = { playerId, called: false, deadline: Date.now() + GAME_CONFIG.UNO_WINDOW_MS };
+    state.uno = {
+      playerId,
+      called: false,
+      deadline: Date.now() + GAME_CONFIG.UNO_WINDOW_MS,
+      turn: state.turnCount,
+    };
+    events.push({ type: "UNO_REQUIRED", playerId });
   } else if (state.uno?.playerId === playerId) {
     state.uno = null;
   }
@@ -438,8 +444,17 @@ function finishPlay(state: GameState, ctx: PlayCtx, events: GameEvent[]): void {
   advanceTurn(state, ctx, events);
   state.turnCount += 1;
   state.stats.cardsPlayed += 1;
-  if (state.status !== "finished") state.phase = "PLAYER_TURN";
+  if (state.status !== "finished" && !state.pending) state.phase = "PLAYER_TURN";
+  expireUnoWindow(state);
   void card;
+}
+
+/** The catch window closes once the following player's turn has been played. */
+function expireUnoWindow(state: GameState): void {
+  if (state.uno && !state.uno.called && state.turnCount > state.uno.turn + 1) {
+    state.uno = null;
+  }
+}
 }
 
 function advanceTurn(state: GameState, ctx: PlayCtx, events: GameEvent[]): void {
