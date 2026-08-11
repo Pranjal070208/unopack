@@ -103,7 +103,7 @@ function Seat({
         active && "border-[var(--ono-yellow)]",
         player.eliminated && "opacity-45 grayscale",
       )}
-      style={active ? { boxShadow: "var(--glow-yellow)" } : undefined}
+      style={{ boxShadow: active ? "var(--glow-yellow)" : "var(--shadow-card)" }}
     >
       {active ? (
         <motion.span
