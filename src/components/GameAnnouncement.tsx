@@ -5,7 +5,7 @@ export type AnnouncementTone = "red" | "yellow" | "green" | "blue" | "violet";
 export interface Announcement {
   key: string;
   text: string;
-  sub?: string | null;
+  sub?: string | null | undefined;
   tone: AnnouncementTone;
   /** Higher wins when two announcements compete for the screen. */
   priority: number;
