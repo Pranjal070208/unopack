@@ -476,16 +476,15 @@ function advanceTurn(state: GameState, ctx: PlayCtx, events: GameEvent[]): void 
 
   if (card.type === "wildroulette") {
     const victim = nextPlayerId(state, playerId, 1);
-    if (victim && state.currentColor) {
+    if (victim) {
+      // The VICTIM names the colour; they then draw until it appears and lose the turn.
       state.phase = "RESOLVING_COLOR_ROULETTE";
-      resolveColorRoulette(state, victim, state.currentColor, events);
-      checkMercyRule(state, events, playerId);
-      if (checkWinConditions(state, events)) return;
-      events.push({ type: "PLAYER_SKIPPED", playerId: victim });
-      state.currentPlayerId = nextPlayerId(state, playerId, 2);
+      state.pending = { kind: "roulette", playerId: victim, cardId: card.id, sourcePlayerId: playerId };
+      events.push({ type: "ROULETTE_STARTED", playerId: victim, data: { sourcePlayerId: playerId } });
       return;
     }
   }
+
 
   // Reverse with two live players behaves like a Skip: the player goes again.
   if ((card.type === "reverse" || card.type === "wildreversedraw4") && headsUp) {
