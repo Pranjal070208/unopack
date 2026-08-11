@@ -17,10 +17,10 @@ interface Options {
 }
 
 interface Mapped {
-  announcement?: { text: string; sub?: string; tone: AnnouncementTone; priority: number; ms: number };
-  feed?: { text: string; major?: boolean };
-  sound?: SoundName;
-  shake?: [number, number];
+  announcement?: { text: string; sub?: string; tone: AnnouncementTone; priority: number; ms: number } | undefined;
+  feed?: { text: string; major?: boolean } | undefined;
+  sound?: SoundName | undefined;
+  shake?: [number, number] | undefined;
 }
 
 const PLAY_TEXT: Record<string, { text: string; tone: AnnouncementTone; priority: number; ms: number }> = {
