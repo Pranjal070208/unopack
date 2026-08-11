@@ -12,7 +12,14 @@ export type SoundName =
   | "leave"
   | "win"
   | "lose"
-  | "countdown";
+  | "countdown"
+  | "reverse"
+  | "skip"
+  | "stack"
+  | "swap"
+  | "roulette"
+  | "uno"
+  | "eliminate";
 
 interface Tone {
   freq: number;
