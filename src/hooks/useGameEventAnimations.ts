@@ -218,6 +218,18 @@ export function useGameEventAnimations({ events, players, myId }: Options) {
             sound: "special",
             feed: { text: `${who} DUMPED ${Number(d.count ?? 0)} CARDS`, major: true },
           };
+        case "ROULETTE_STARTED":
+          return {
+            announcement: { text: "ROULETTE!", sub: `${who} PICKS A COLOR`, tone: "violet", priority: 82, ms: 1200 },
+            sound: "roulette",
+            feed: { text: `${who} MUST PICK A COLOR`, major: true },
+          };
+        case "ROULETTE_CARD_REVEALED":
+          return { sound: "draw", feed: { text: `${who} REVEALED A CARD` } };
+        case "ROULETTE_COMPLETED":
+          return null;
+        case "UNO_REQUIRED":
+          return { feed: { text: `${who} IS ON ONE CARD`, major: true } };
         case "COLOR_ROULETTE_RESOLVED":
           return {
             announcement: {
