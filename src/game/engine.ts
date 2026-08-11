@@ -669,7 +669,8 @@ function catchUno(state: GameState, playerId: string, targetId: string, events: 
   if (!uno || uno.playerId !== targetId) throw new Error("NOTHING_TO_CATCH");
   if (uno.called) throw new Error("ALREADY_CALLED");
   if (playerId === targetId) throw new Error("CANNOT_CATCH_SELF");
-  if (Date.now() > uno.deadline) throw new Error("WINDOW_CLOSED");
+  // The window closes on time OR once the following player has finished a turn.
+  if (Date.now() > uno.deadline || state.turnCount > uno.turn + 1) throw new Error("WINDOW_CLOSED");
   const catcher = state.players.find((p) => p.id === playerId && !p.eliminated);
   if (!catcher) throw new Error("NOT_IN_GAME");
 
@@ -689,7 +690,9 @@ function timeout(state: GameState, events: GameEvent[]): void {
   events.push({ type: "TURN_TIMEOUT", playerId: current });
   if (state.pending) {
     // Auto-resolve a stalled choice so the table never locks up.
-    if (state.pending.kind === "color") {
+    if (state.pending.kind === "roulette") {
+      chooseRouletteColor(state, state.pending.playerId, state.currentColor ?? "red", events);
+    } else if (state.pending.kind === "color") {
       chooseColor(state, current, state.currentColor ?? "red", events);
     } else {
       const target = activePlayers(state).find((p) => p.id !== current);
@@ -723,6 +726,9 @@ export function applyCommand(state: GameState, command: Command): CommandResult 
       break;
     case "CHOOSE_COLOR":
       chooseColor(next, command.playerId, command.color, events);
+      break;
+    case "CHOOSE_ROULETTE_COLOR":
+      chooseRouletteColor(next, command.playerId, command.color, events);
       break;
     case "CHOOSE_SWAP_TARGET":
       chooseSwapTarget(next, command.playerId, command.targetId, events);
