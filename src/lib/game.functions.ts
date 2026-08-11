@@ -125,6 +125,17 @@ export const startGame = createServerFn({ method: "POST" })
     return { gameId: game.id as string };
   });
 
+/** Host-only toggle for the optional 1000-point Score Mode. */
+export const setScoreMode = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => identity.extend({ enabled: z.boolean() }).parse(d))
+  .handler(async ({ data }) => {
+    const s = await import("./game.server");
+    const { db, player } = await s.authPlayer(data.playerId, data.secret);
+    if (!player.is_host) throw new Error("HOST_ONLY");
+    await db.from("rooms").update({ score_mode: data.enabled }).eq("id", player.room_id);
+    return { ok: true, enabled: data.enabled };
+  });
+
 const commandSchema = identity.extend({
   actionId: z.string().min(6).max(64),
   command: z.discriminatedUnion("type", [
@@ -136,6 +147,7 @@ const commandSchema = identity.extend({
     }),
     z.object({ type: z.literal("DRAW_CARD") }),
     z.object({ type: z.literal("CHOOSE_COLOR"), color: z.enum(["red", "yellow", "green", "blue"]) }),
+    z.object({ type: z.literal("CHOOSE_ROULETTE_COLOR"), color: z.enum(["red", "yellow", "green", "blue"]) }),
     z.object({ type: z.literal("CHOOSE_SWAP_TARGET"), targetId: z.string().uuid() }),
     z.object({ type: z.literal("CALL_UNO") }),
     z.object({ type: z.literal("CATCH_UNO"), targetId: z.string().uuid() }),

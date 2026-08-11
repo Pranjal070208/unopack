@@ -108,7 +108,45 @@ export async function saveState(db: any, gameId: string, roomId: string, state: 
   }
 
   if (state.status === "finished") {
+    await applyHandScores(db, roomId, state);
+  }
+}
+
+/**
+ * Score Mode bookkeeping: the hand winner banks opponents' card points plus a
+ * 250 knockout bonus per eliminated player; 1000 points wins the match.
+ */
+async function applyHandScores(db: any, roomId: string, state: GameState) {
+  const { data: room } = await db.from("rooms").select("score_mode").eq("id", roomId).maybeSingle();
+  if (!room?.score_mode) {
     await db.from("rooms").update({ status: "finished" }).eq("id", roomId);
+    return;
+  }
+
+  const { calculateScore, reachedTarget } = await import("@/game/scoring");
+  const score = calculateScore(state);
+  for (const p of state.players) {
+    const gained = p.id === score.winnerId ? score.total : 0;
+    const { data: row } = await db.from("players").select("score").eq("id", p.id).maybeSingle();
+    await db
+      .from("players")
+      .update({ score: (row?.score ?? 0) + gained, last_hand_points: gained })
+      .eq("id", p.id);
+  }
+
+  const { data: top } = await db
+    .from("players")
+    .select("id, score")
+    .eq("room_id", roomId)
+    .order("score", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (top && reachedTarget(top.score ?? 0)) {
+    await db.from("rooms").update({ status: "finished", match_winner_id: top.id }).eq("id", roomId);
+  } else {
+    // Match continues: the room returns to the lobby so the host can deal the next hand.
+    await db.from("rooms").update({ status: "lobby" }).eq("id", roomId);
   }
 }
 
@@ -121,7 +159,7 @@ export async function startNewGame(db: any, roomId: string) {
   for (let i = 0; i < list.length; i++) {
     await db
       .from("players")
-      .update({ seat: i, eliminated: false, finished_rank: null })
+      .update({ seat: i, eliminated: false, finished_rank: null, last_hand_points: 0 })
       .eq("id", list[i]!.id);
   }
 
