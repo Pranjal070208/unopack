@@ -282,15 +282,18 @@ export function useGameEventAnimations({ events, players, myId }: Options) {
   );
 
   useEffect(() => {
+    // Prime even when the initial history is empty. Previously the first live
+    // event in a new room was treated as history and discarded, which made a
+    // player's first reaction appear to do nothing.
+    if (!primed.current) {
+      primed.current = true;
+      lastSeq.current = events[events.length - 1]?.id ?? 0;
+      return;
+    }
+
     const fresh = events.filter((e) => e.id > lastSeq.current);
     if (fresh.length === 0) return;
     lastSeq.current = events[events.length - 1]?.id ?? lastSeq.current;
-
-    // A late join / reconnect must not replay history.
-    if (!primed.current) {
-      primed.current = true;
-      return;
-    }
 
     for (const e of fresh) {
       const data = e.event_data as { nickname?: string; text?: string };
