@@ -13,13 +13,13 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "ONO No Mercy — Real-Time Multiplayer Card Chaos" },
+      { title: "UNO No Mercy — Real-Time Multiplayer Card Chaos" },
       {
         name: "description",
         content:
-          "Play ONO No Mercy online with friends: private rooms, brutal +10 stacks, 25-card eliminations and real-time chaos in your browser.",
+          "Play UNO No Mercy online with friends: private rooms, brutal +10 stacks, 25-card eliminations and real-time chaos in your browser.",
       },
-      { property: "og:title", content: "ONO No Mercy — Real-Time Multiplayer Card Chaos" },
+      { property: "og:title", content: "UNO No Mercy — Real-Time Multiplayer Card Chaos" },
       {
         property: "og:description",
         content: "Create a private room, share the code and unleash no-mercy card warfare with up to 10 players.",
@@ -96,7 +96,7 @@ function Landing() {
           transition={{ type: "spring", stiffness: 220, damping: 16 }}
           className="text-stroke-black mt-4 font-display text-6xl uppercase leading-[0.85] sm:text-8xl"
         >
-          <span className="block text-[var(--ono-red)] drop-shadow-[0_8px_40px_oklch(0.58_0.24_25/0.55)]">ONO</span>
+          <span className="block text-[var(--ono-red)] drop-shadow-[0_8px_40px_oklch(0.58_0.24_25/0.55)]">UNO</span>
           <span className="block text-[var(--ono-yellow)]">No Mercy</span>
         </motion.h1>
 
