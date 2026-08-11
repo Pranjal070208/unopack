@@ -20,17 +20,17 @@ interface Props {
 
 /** Card geometry adapts to hand size so 24 cards never destroy the layout. */
 function layoutFor(count: number) {
-  if (count <= 7) return { size: "md" as const, overlap: -14, lift: 20 };
-  if (count <= 12) return { size: "md" as const, overlap: -34, lift: 18 };
-  if (count <= 18) return { size: "sm" as const, overlap: -20, lift: 16 };
-  return { size: "sm" as const, overlap: -28, lift: 14 };
+  if (count <= 7) return { size: "md" as const, overlap: -14 };
+  if (count <= 12) return { size: "md" as const, overlap: -34 };
+  if (count <= 18) return { size: "sm" as const, overlap: -20 };
+  return { size: "sm" as const, overlap: -28 };
 }
 
 export function PlayerHand({ hand, playable, myTurn, onPlay, hint, touch }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [wildFor, setWildFor] = useState<string | null>(null);
   const [flying, setFlying] = useState<string | null>(null);
-  const { size, overlap, lift } = layoutFor(hand.length);
+  const { size, overlap } = layoutFor(hand.length);
 
   useEffect(() => {
     if (selected && !hand.some((c) => c.id === selected)) setSelected(null);
@@ -189,8 +189,6 @@ export function PlayerHand({ hand, playable, myTurn, onPlay, hint, touch }: Prop
           })}
         </AnimatePresence>
       </div>
-      <style>{`@media (hover:hover){}`}</style>
-      <span className="sr-only">{`Lift ${lift}`}</span>
     </div>
   );
 }
