@@ -455,7 +455,6 @@ function expireUnoWindow(state: GameState): void {
     state.uno = null;
   }
 }
-}
 
 function advanceTurn(state: GameState, ctx: PlayCtx, events: GameEvent[]): void {
   const { playerId, card } = ctx;
