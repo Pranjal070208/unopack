@@ -35,17 +35,22 @@ export interface DrawStack {
 }
 
 export interface PendingChoice {
-  kind: "color" | "swap";
+  /** `roulette` is chosen by the *victim*, not by the player who played the card. */
+  kind: "color" | "swap" | "roulette";
   playerId: string;
   cardId: string;
   /** Set when the pending card came from a forced draw-until-playable play. */
   fromDraw?: boolean;
+  /** For roulette: the player whose turn produced the effect. */
+  sourcePlayerId?: string;
 }
 
 export interface UnoState {
   playerId: string;
   called: boolean;
   deadline: number;
+  /** Turn index when the window opened; the catch closes once the next turn ends. */
+  turn: number;
 }
 
 export interface GameStats {
