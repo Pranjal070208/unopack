@@ -103,17 +103,23 @@ export type GameEventType =
   | "FORCED_PLAY"
   | "DRAW_STACK_STARTED"
   | "DRAW_STACK_EXTENDED"
+  | "DRAW_STACK_UPDATED"
   | "DRAW_STACK_RESOLVED"
   | "COLOR_SELECTED"
   | "HAND_SWAPPED"
   | "HANDS_ROTATED"
+  | "HANDS_PASSED"
   | "DISCARD_ALL_RESOLVED"
+  | "ROULETTE_STARTED"
+  | "ROULETTE_CARD_REVEALED"
+  | "ROULETTE_COMPLETED"
   | "COLOR_ROULETTE_RESOLVED"
   | "PLAYER_SKIPPED"
   | "EVERYONE_SKIPPED"
   | "DIRECTION_REVERSED"
   | "DECK_RESHUFFLED"
   | "PLAYER_ELIMINATED"
+  | "UNO_REQUIRED"
   | "UNO_CALLED"
   | "UNO_CAUGHT"
   | "TURN_TIMEOUT"
@@ -130,6 +136,7 @@ export type Command =
   | { type: "PLAY_CARD"; playerId: string; cardId: string; color?: CardColor; targetId?: string; actionId?: string }
   | { type: "DRAW_CARD"; playerId: string; actionId?: string }
   | { type: "CHOOSE_COLOR"; playerId: string; color: CardColor; actionId?: string }
+  | { type: "CHOOSE_ROULETTE_COLOR"; playerId: string; color: CardColor; actionId?: string }
   | { type: "CHOOSE_SWAP_TARGET"; playerId: string; targetId: string; actionId?: string }
   | { type: "CALL_UNO"; playerId: string; actionId?: string }
   | { type: "CATCH_UNO"; playerId: string; targetId: string; actionId?: string }
