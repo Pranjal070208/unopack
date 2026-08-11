@@ -7,13 +7,12 @@ import { GameLobby } from "@/components/GameLobby";
 import { GameTable } from "@/components/GameTable";
 import { VictoryScreen } from "@/components/VictoryScreen";
 import { GameAnnouncement } from "@/components/GameAnnouncement";
-import { EventFeed } from "@/components/EventFeed";
 import { useGameEventAnimations } from "@/hooks/useGameEventAnimations";
 import { useScreenShake } from "@/lib/fx";
 import { GameButton } from "@/components/GameButton";
 import { GameChat, ReactionPicker } from "@/components/Social";
 import { AVATARS } from "@/lib/avatars";
-import { useRoom, type EventRow } from "@/hooks/useRoom";
+import { useRoom } from "@/hooks/useRoom";
 import { playSound, useSound } from "@/hooks/useSound";
 import {
   enforceTimeout,
