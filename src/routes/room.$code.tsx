@@ -7,6 +7,7 @@ import { GameLobby } from "@/components/GameLobby";
 import { GameTable } from "@/components/GameTable";
 import { VictoryScreen } from "@/components/VictoryScreen";
 import { GameAnnouncement } from "@/components/GameAnnouncement";
+import { ReactionBursts } from "@/components/ReactionBursts";
 import { useGameEventAnimations } from "@/hooks/useGameEventAnimations";
 import { useScreenShake } from "@/lib/fx";
 import { GameButton } from "@/components/GameButton";
@@ -59,7 +60,7 @@ function RoomPage() {
   const players = room.players;
   const me = room.me;
 
-  const { announcement, feed, reactions, notice, chat } = useGameEventAnimations({
+  const { announcement, feed, reactions, bursts, notice, chat } = useGameEventAnimations({
     events: room.events,
     players,
     myId: me?.id ?? null,
@@ -200,6 +201,7 @@ function RoomPage() {
   return (
     <main className="relative min-h-[100dvh] bg-background">
       <GameAnnouncement announcement={announcement} />
+      <ReactionBursts bursts={bursts} />
       {shake ? (
         <div
           key={shake.key}
