@@ -22,6 +22,7 @@ import {
   playAgain,
   returnToLobby,
   sendCommand,
+  setScoreMode,
   sendRoomEvent,
   startGame,
 } from "@/lib/game.functions";
@@ -232,6 +233,7 @@ function RoomPage() {
           }
           onDraw={() => void cmd({ type: "DRAW_CARD" })}
           onChooseColor={(color) => void cmd({ type: "CHOOSE_COLOR", color })}
+          onChooseRouletteColor={(color) => void cmd({ type: "CHOOSE_ROULETTE_COLOR", color })}
           onChooseSwapTarget={(targetId) => void cmd({ type: "CHOOSE_SWAP_TARGET", targetId })}
           onCallUno={() => void cmd({ type: "CALL_UNO" })}
           onCatchUno={(targetId) => void cmd({ type: "CATCH_UNO", targetId })}
@@ -258,6 +260,7 @@ function RoomPage() {
             onStart={() => void act(startGame as never)}
             onLeave={handleLeave}
             onKick={(id) => void act(kickPlayer as never, { targetId: id })}
+            onToggleScoreMode={(enabled) => void act(setScoreMode as never, { enabled })}
           />
           <div className="fixed bottom-4 right-4 z-30 flex items-center gap-2">{social}</div>
         </>

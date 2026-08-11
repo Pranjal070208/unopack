@@ -226,57 +226,34 @@ export function createGame(playerIds: string[], seed: number = makeSeed()): Comm
 }
 
 /**
- * Flip the opening card. Wilds and Wild Color Roulette are returned to the deck
- * and a new card is flipped (the deck cannot choose a colour). A colour action
- * card takes effect against the first player exactly as if it had been played.
+ * Flip the opening card. Per the official sheet, if the revealed card is an
+ * Action card it is ignored and the next card is flipped, so play always opens
+ * on a plain number card.
  */
 export function initializeDiscardPile(state: GameState, events: GameEvent[]): void {
   let first: Card | undefined;
+  const buried: Card[] = [];
   for (let guard = 0; guard < GAME_CONFIG.MAX_REVEAL_ITERATIONS; guard++) {
     const candidate = takeFromDeck(state, 1, events)[0];
     if (!candidate) break;
-    if (isWild(candidate)) {
-      // Bury wilds back into the deck and flip again.
-      state.deck.push(candidate);
+    if (candidate.type !== "number") {
+      buried.push(candidate);
       continue;
     }
     first = candidate;
     break;
   }
+  // Ignored action cards go back into the draw pile.
+  if (buried.length) {
+    const rng = rngOf(state);
+    state.deck = shuffleDeck(state.deck.concat(buried), rng);
+    commitRng(state, rng);
+  }
   if (!first) return;
 
   state.pile = [first];
   state.discardTop = first;
-  state.currentColor = first.color === "wild" ? "red" : first.color;
-
-  const opener = state.currentPlayerId;
-  if (!opener) return;
-
-  switch (first.type) {
-    case "skip":
-      events.push({ type: "PLAYER_SKIPPED", playerId: opener, data: { byOpeningCard: true } });
-      state.currentPlayerId = nextPlayerId(state, opener, 1);
-      break;
-    case "skipall":
-      events.push({ type: "EVERYONE_SKIPPED", data: { byOpeningCard: true } });
-      break;
-    case "reverse": {
-      state.direction = state.direction === 1 ? -1 : 1;
-      events.push({ type: "DIRECTION_REVERSED", data: { byOpeningCard: true } });
-      const live = activePlayers(state);
-      state.currentPlayerId = live.length === 2 ? opener : nextPlayerId(state, opener, live.length - 1);
-      break;
-    }
-    case "draw2":
-    case "draw4": {
-      const amount = drawValue(first);
-      state.drawStack = { active: true, totalPenalty: amount, lastCardValue: amount, initiatorId: null };
-      events.push({ type: "DRAW_STACK_STARTED", data: { amount, total: amount, byOpeningCard: true } });
-      break;
-    }
-    default:
-      break;
-  }
+  state.currentColor = first.color as CardColor;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -330,7 +307,9 @@ function resolveColorRoulette(state: GameState, victimId: string, color: CardCol
     if (!card) break;
     revealed.push(card);
     // Wild cards never satisfy the chosen colour.
-    if (!isWild(card) && card.color === color) {
+    const hit = !isWild(card) && card.color === color;
+    events.push({ type: "ROULETTE_CARD_REVEALED", playerId: victimId, data: { card, color, hit } });
+    if (hit) {
       matched = true;
       break;
     }
@@ -338,11 +317,9 @@ function resolveColorRoulette(state: GameState, victimId: string, color: CardCol
   giveCards(state, victimId, revealed);
   state.stats.colorRoulettes += 1;
   state.stats.cardsDrawn += revealed.length;
-  events.push({
-    type: "COLOR_ROULETTE_RESOLVED",
-    playerId: victimId,
-    data: { color, revealed, count: revealed.length, matched },
-  });
+  const data = { color, revealed, count: revealed.length, matched };
+  events.push({ type: "COLOR_ROULETTE_RESOLVED", playerId: victimId, data });
+  events.push({ type: "ROULETTE_COMPLETED", playerId: victimId, data });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -453,7 +430,13 @@ function finishPlay(state: GameState, ctx: PlayCtx, events: GameEvent[]): void {
   // UNO window opens for the player who just played down to one card.
   const myCount = state.hands[playerId]?.length ?? 0;
   if (myCount === GAME_CONFIG.UNO_REQUIRED_AT) {
-    state.uno = { playerId, called: false, deadline: Date.now() + GAME_CONFIG.UNO_WINDOW_MS };
+    state.uno = {
+      playerId,
+      called: false,
+      deadline: Date.now() + GAME_CONFIG.UNO_WINDOW_MS,
+      turn: state.turnCount,
+    };
+    events.push({ type: "UNO_REQUIRED", playerId });
   } else if (state.uno?.playerId === playerId) {
     state.uno = null;
   }
@@ -461,8 +444,16 @@ function finishPlay(state: GameState, ctx: PlayCtx, events: GameEvent[]): void {
   advanceTurn(state, ctx, events);
   state.turnCount += 1;
   state.stats.cardsPlayed += 1;
-  if (state.status !== "finished") state.phase = "PLAYER_TURN";
+  if (state.status !== "finished" && !state.pending) state.phase = "PLAYER_TURN";
+  expireUnoWindow(state);
   void card;
+}
+
+/** The catch window closes once the following player's turn has been played. */
+function expireUnoWindow(state: GameState): void {
+  if (state.uno && !state.uno.called && state.turnCount > state.uno.turn + 1) {
+    state.uno = null;
+  }
 }
 
 function advanceTurn(state: GameState, ctx: PlayCtx, events: GameEvent[]): void {
@@ -485,16 +476,15 @@ function advanceTurn(state: GameState, ctx: PlayCtx, events: GameEvent[]): void 
 
   if (card.type === "wildroulette") {
     const victim = nextPlayerId(state, playerId, 1);
-    if (victim && state.currentColor) {
+    if (victim) {
+      // The VICTIM names the colour; they then draw until it appears and lose the turn.
       state.phase = "RESOLVING_COLOR_ROULETTE";
-      resolveColorRoulette(state, victim, state.currentColor, events);
-      checkMercyRule(state, events, playerId);
-      if (checkWinConditions(state, events)) return;
-      events.push({ type: "PLAYER_SKIPPED", playerId: victim });
-      state.currentPlayerId = nextPlayerId(state, playerId, 2);
+      state.pending = { kind: "roulette", playerId: victim, cardId: card.id, sourcePlayerId: playerId };
+      events.push({ type: "ROULETTE_STARTED", playerId: victim, data: { sourcePlayerId: playerId } });
       return;
     }
   }
+
 
   // Reverse with two live players behaves like a Skip: the player goes again.
   if ((card.type === "reverse" || card.type === "wildreversedraw4") && headsUp) {
@@ -642,6 +632,29 @@ function chooseSwapTarget(state: GameState, playerId: string, targetId: string, 
   );
 }
 
+/**
+ * Wild Color Roulette: the VICTIM (next player) names a colour, then reveals
+ * cards until that colour appears, keeps every revealed card and loses the turn.
+ */
+function chooseRouletteColor(state: GameState, playerId: string, color: CardColor, events: GameEvent[]): void {
+  const pending = state.pending;
+  if (!pending || pending.kind !== "roulette") throw new Error("NO_ROULETTE_PENDING");
+  if (pending.playerId !== playerId) throw new Error("NOT_YOUR_CHOICE");
+  const source = pending.sourcePlayerId ?? state.currentPlayerId ?? playerId;
+
+  state.pending = null;
+  resolveColorRoulette(state, playerId, color, events);
+  checkMercyRule(state, events, source);
+  if (checkWinConditions(state, events)) return;
+
+  events.push({ type: "PLAYER_SKIPPED", playerId });
+  state.currentPlayerId = nextPlayerId(state, source, 2);
+  state.turnCount += 1;
+  state.phase = "PLAYER_TURN";
+  expireUnoWindow(state);
+}
+
+
 function callUno(state: GameState, playerId: string, events: GameEvent[]): void {
   const uno = state.uno;
   if (!uno || uno.playerId !== playerId) throw new Error("NO_UNO_PENDING");
@@ -656,7 +669,8 @@ function catchUno(state: GameState, playerId: string, targetId: string, events: 
   if (!uno || uno.playerId !== targetId) throw new Error("NOTHING_TO_CATCH");
   if (uno.called) throw new Error("ALREADY_CALLED");
   if (playerId === targetId) throw new Error("CANNOT_CATCH_SELF");
-  if (Date.now() > uno.deadline) throw new Error("WINDOW_CLOSED");
+  // The window closes on time OR once the following player has finished a turn.
+  if (Date.now() > uno.deadline || state.turnCount > uno.turn + 1) throw new Error("WINDOW_CLOSED");
   const catcher = state.players.find((p) => p.id === playerId && !p.eliminated);
   if (!catcher) throw new Error("NOT_IN_GAME");
 
@@ -676,7 +690,9 @@ function timeout(state: GameState, events: GameEvent[]): void {
   events.push({ type: "TURN_TIMEOUT", playerId: current });
   if (state.pending) {
     // Auto-resolve a stalled choice so the table never locks up.
-    if (state.pending.kind === "color") {
+    if (state.pending.kind === "roulette") {
+      chooseRouletteColor(state, state.pending.playerId, state.currentColor ?? "red", events);
+    } else if (state.pending.kind === "color") {
       chooseColor(state, current, state.currentColor ?? "red", events);
     } else {
       const target = activePlayers(state).find((p) => p.id !== current);
@@ -710,6 +726,9 @@ export function applyCommand(state: GameState, command: Command): CommandResult 
       break;
     case "CHOOSE_COLOR":
       chooseColor(next, command.playerId, command.color, events);
+      break;
+    case "CHOOSE_ROULETTE_COLOR":
+      chooseRouletteColor(next, command.playerId, command.color, events);
       break;
     case "CHOOSE_SWAP_TARGET":
       chooseSwapTarget(next, command.playerId, command.targetId, events);

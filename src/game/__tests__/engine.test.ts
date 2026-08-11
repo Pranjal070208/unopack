@@ -427,7 +427,10 @@ describe("wild color roulette", () => {
       card("r6", "red", "number", 3),
       card("r7", "blue", "number", 1),
     ];
-    const next = applyCommand(state, { type: "PLAY_CARD", playerId: "p1", cardId: "wr", color: "red" }).state;
+    const played = applyCommand(state, { type: "PLAY_CARD", playerId: "p1", cardId: "wr", color: "red" }).state;
+    // The victim, not the player, names the roulette colour.
+    expect(played.pending).toMatchObject({ kind: "roulette", playerId: "p2" });
+    const next = applyCommand(played, { type: "CHOOSE_ROULETTE_COLOR", playerId: "p2", color: "red" }).state;
     expect(next.hands["p2"]).toHaveLength(1 + 6);
     expect(next.hands["p2"]!.some((c) => c.id === "r6")).toBe(true);
     expect(next.pile.some((c) => c.id === "r6")).toBe(false);
@@ -453,8 +456,61 @@ describe("wild color roulette", () => {
       card("k3", "red", "number", 3),
       card("k4", "blue", "number", 4),
     ];
-    const next = applyCommand(state, { type: "PLAY_CARD", playerId: "p1", cardId: "wr", color: "red" }).state;
+    const played = applyCommand(state, { type: "PLAY_CARD", playerId: "p1", cardId: "wr", color: "red" }).state;
+    const next = applyCommand(played, { type: "CHOOSE_ROULETTE_COLOR", playerId: "p2", color: "red" }).state;
     expect(next.players.find((p) => p.id === "p2")?.eliminated).toBe(true);
+  });
+
+  it("only the victim may choose the roulette colour", () => {
+    const state = table(3);
+    state.hands["p1"] = [card("wr", "wild", "wildroulette"), ...filler("p1", 1)];
+    state.deck = [card("q1", "red", "number", 5)];
+    const played = applyCommand(state, { type: "PLAY_CARD", playerId: "p1", cardId: "wr", color: "red" }).state;
+    expect(() =>
+      applyCommand(played, { type: "CHOOSE_ROULETTE_COLOR", playerId: "p1", color: "red" }),
+    ).toThrow();
+  });
+});
+
+describe("opening card", () => {
+  it("ignores action cards and opens on a number", async () => {
+    const { initializeDiscardPile } = await import("../engine");
+    const state = table(3);
+    state.pile = [];
+    state.discardTop = null;
+    state.deck = [
+      card("o1", "red", "skip"),
+      card("o2", "wild", "wilddraw10"),
+      card("o3", "green", "draw2"),
+      card("o4", "blue", "number", 5),
+      card("o5", "red", "number", 1),
+    ];
+    initializeDiscardPile(state, []);
+    expect(state.pile[0]?.id).toBe("o4");
+    expect(state.currentColor).toBe("blue");
+    expect(state.pile).toHaveLength(1);
+    // Ignored action cards are returned to the draw pile.
+    expect(state.deck.some((c) => c.id === "o1")).toBe(true);
+  });
+});
+
+describe("score mode", () => {
+  it("scores card points plus a 250 knockout bonus", async () => {
+    const { calculateScore, cardPoints } = await import("../scoring");
+    expect(cardPoints(card("n", "red", "number", 7))).toBe(7);
+    expect(cardPoints(card("s", "red", "skip"))).toBe(20);
+    expect(cardPoints(card("w", "wild", "wilddraw10"))).toBe(50);
+
+    const state = table(3);
+    state.winnerId = "p1";
+    state.hands["p1"] = [];
+    state.hands["p2"] = [card("a", "red", "number", 9), card("b", "red", "skip")];
+    state.hands["p3"] = [card("c", "wild", "wilddraw6")];
+    state.players.find((p) => p.id === "p3")!.eliminated = true;
+    const score = calculateScore(state);
+    expect(score.cardPoints).toBe(29);
+    expect(score.knockoutPoints).toBe(250);
+    expect(score.total).toBe(279);
   });
 });
 

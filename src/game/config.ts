@@ -12,6 +12,9 @@ export const GAME_CONFIG = {
   ALLOW_SEVEN_SWAP: true,
   ALLOW_ZERO_ROTATION: true,
   ALLOW_COLOR_ROULETTE_STACKING: false,
+  /** Optional Score Mode. */
+  SCORE_TARGET: 1000,
+  KNOCKOUT_BONUS: 250,
   /** Safety valve so a pathological deck can never hang the server. */
   MAX_REVEAL_ITERATIONS: 400,
 } as const;

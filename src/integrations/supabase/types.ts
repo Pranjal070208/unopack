@@ -179,9 +179,11 @@ export type Database = {
           is_connected: boolean
           is_host: boolean
           joined_at: string
+          last_hand_points: number
           last_seen: string
           nickname: string
           room_id: string
+          score: number
           seat: number
           session_id: string
         }
@@ -194,9 +196,11 @@ export type Database = {
           is_connected?: boolean
           is_host?: boolean
           joined_at?: string
+          last_hand_points?: number
           last_seen?: string
           nickname: string
           room_id: string
+          score?: number
           seat?: number
           session_id: string
         }
@@ -209,9 +213,11 @@ export type Database = {
           is_connected?: boolean
           is_host?: boolean
           joined_at?: string
+          last_hand_points?: number
           last_seen?: string
           nickname?: string
           room_id?: string
+          score?: number
           seat?: number
           session_id?: string
         }
@@ -231,7 +237,9 @@ export type Database = {
           created_at: string
           host_player_id: string | null
           id: string
+          match_winner_id: string | null
           max_players: number
+          score_mode: boolean
           status: string
         }
         Insert: {
@@ -239,7 +247,9 @@ export type Database = {
           created_at?: string
           host_player_id?: string | null
           id?: string
+          match_winner_id?: string | null
           max_players?: number
+          score_mode?: boolean
           status?: string
         }
         Update: {
@@ -247,7 +257,9 @@ export type Database = {
           created_at?: string
           host_player_id?: string | null
           id?: string
+          match_winner_id?: string | null
           max_players?: number
+          score_mode?: boolean
           status?: string
         }
         Relationships: []

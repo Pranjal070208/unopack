@@ -14,9 +14,10 @@ interface Props {
   onStart: () => void;
   onLeave: () => void;
   onKick: (id: string) => void;
+  onToggleScoreMode: (enabled: boolean) => void;
 }
 
-export function GameLobby({ room, players, me, notice, onStart, onLeave, onKick }: Props) {
+export function GameLobby({ room, players, me, notice, onStart, onLeave, onKick, onToggleScoreMode }: Props) {
   const isHost = me?.is_host ?? false;
   const canStart = players.length >= 2;
 
@@ -137,6 +138,26 @@ export function GameLobby({ room, players, me, notice, onStart, onLeave, onKick 
           </motion.p>
         ) : null}
       </AnimatePresence>
+
+      {/* Optional Score Mode: play to 1000 points instead of a single hand. */}
+      <div className="mt-6 flex justify-center">
+        <button
+          type="button"
+          disabled={!isHost}
+          onClick={() => onToggleScoreMode(!room.score_mode)}
+          className="panel flex min-h-11 items-center gap-3 px-4 py-2 font-display text-[10px] uppercase tracking-[0.2em] disabled:opacity-60"
+        >
+          <span className={room.score_mode ? "text-[var(--ono-yellow)]" : "text-muted-foreground"}>
+            Score mode — first to 1000
+          </span>
+          <span
+            className="rounded-full border-2 border-white/70 px-2 py-0.5"
+            style={{ background: room.score_mode ? "var(--ono-green)" : "transparent" }}
+          >
+            {room.score_mode ? "On" : "Off"}
+          </span>
+        </button>
+      </div>
 
       <div className="sticky bottom-3 mt-6 flex justify-center">
         {isHost ? (

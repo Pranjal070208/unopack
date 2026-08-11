@@ -35,6 +35,7 @@ interface Props {
   onDraw: () => void;
   onTimeout: () => void;
   onChooseColor: (color: Exclude<CardColor, "wild">) => void;
+  onChooseRouletteColor: (color: Exclude<CardColor, "wild">) => void;
   onChooseSwapTarget: (targetId: string) => void;
   onCallUno: () => void;
   onCatchUno: (targetId: string) => void;
@@ -65,6 +66,7 @@ export function GameTable({
   onDraw,
   onTimeout,
   onChooseColor,
+  onChooseRouletteColor,
   onChooseSwapTarget,
   onCallUno,
   onCatchUno,
@@ -80,7 +82,11 @@ export function GameTable({
   const current = players.find((p) => p.id === game.current_player_id);
   const phase = game.phase ?? "PLAYER_TURN";
   const uno = game.public_state?.uno ?? null;
+  const pending = game.public_state?.pending ?? null;
   const mustPickColor = myTurn && phase === "CHOOSING_COLOR";
+  // Roulette is answered by the VICTIM, who is not the current player.
+  const mustPickRoulette = !!me && pending?.kind === "roulette" && pending.playerId === me.id;
+  const rouletteVictim = pending?.kind === "roulette" ? players.find((p) => p.id === pending.playerId) : undefined;
   const mustPickTarget = myTurn && phase === "CHOOSING_SWAP_TARGET";
   const canCallUno = !!me && uno?.playerId === me.id && !uno.called;
   const catchTarget = uno && !uno.called && uno.playerId !== me?.id ? uno.playerId : null;
@@ -286,6 +292,38 @@ export function GameTable({
               </motion.button>
             ))}
           </div>
+        </Overlay>
+      ) : null}
+
+      {mustPickRoulette ? (
+        <Overlay title="Color roulette — pick your poison">
+          <p className="text-center font-display text-[10px] uppercase tracking-widest text-muted-foreground">
+            You draw until this color shows up, then lose your turn.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            {COLOR_CHOICES.map((c) => (
+              <motion.button
+                key={c.color}
+                type="button"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.94 }}
+                onClick={() => {
+                  playSound("roulette");
+                  onChooseRouletteColor(c.color);
+                }}
+                className="h-20 min-h-11 rounded-2xl border-[3px] border-white/80 font-display text-sm uppercase tracking-widest text-white"
+                style={{ background: c.css, boxShadow: "var(--shadow-card)" }}
+              >
+                {c.label}
+              </motion.button>
+            ))}
+          </div>
+        </Overlay>
+      ) : pending?.kind === "roulette" ? (
+        <Overlay title="Color roulette">
+          <p className="text-center font-display text-sm uppercase tracking-widest text-[var(--ono-yellow)]">
+            {rouletteVictim?.nickname ?? "Someone"} is picking a color…
+          </p>
         </Overlay>
       ) : null}
 
