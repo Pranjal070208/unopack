@@ -486,7 +486,7 @@ describe("opening card", () => {
       card("o5", "red", "number", 1),
     ];
     initializeDiscardPile(state, []);
-    expect(state.discardTop?.id).toBe("o4");
+    expect(state.pile[0]?.id).toBe("o4");
     expect(state.currentColor).toBe("blue");
     expect(state.pile).toHaveLength(1);
     // Ignored action cards are returned to the draw pile.
