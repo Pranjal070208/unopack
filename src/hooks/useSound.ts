@@ -12,7 +12,14 @@ export type SoundName =
   | "leave"
   | "win"
   | "lose"
-  | "countdown";
+  | "countdown"
+  | "reverse"
+  | "skip"
+  | "stack"
+  | "swap"
+  | "roulette"
+  | "uno"
+  | "eliminate";
 
 interface Tone {
   freq: number;
@@ -56,6 +63,31 @@ const RECIPES: Record<SoundName, Tone[]> = {
     { freq: 180, dur: 0.32, type: "sawtooth", gain: 0.1, delay: 0.16, slide: 80 },
   ],
   countdown: [{ freq: 620, dur: 0.1, type: "square", gain: 0.12 }],
+  reverse: [
+    { freq: 300, dur: 0.16, type: "triangle", gain: 0.12, slide: 900 },
+    { freq: 900, dur: 0.16, type: "triangle", gain: 0.1, delay: 0.14, slide: 300 },
+  ],
+  skip: [{ freq: 1200, dur: 0.09, type: "square", gain: 0.11, slide: 300 }],
+  stack: [
+    { freq: 260, dur: 0.09, type: "square", gain: 0.11 },
+    { freq: 420, dur: 0.11, type: "square", gain: 0.11, delay: 0.07 },
+  ],
+  swap: [
+    { freq: 500, dur: 0.12, type: "sine", gain: 0.1, slide: 900 },
+    { freq: 900, dur: 0.12, type: "sine", gain: 0.1, delay: 0.1, slide: 500 },
+  ],
+  roulette: [
+    { freq: 220, dur: 0.4, type: "sawtooth", gain: 0.12, slide: 1200 },
+    { freq: 1400, dur: 0.2, type: "square", gain: 0.08, delay: 0.36, slide: 500 },
+  ],
+  uno: [
+    { freq: 880, dur: 0.1, type: "square", gain: 0.14 },
+    { freq: 1320, dur: 0.18, type: "square", gain: 0.14, delay: 0.09 },
+  ],
+  eliminate: [
+    { freq: 420, dur: 0.3, type: "sawtooth", gain: 0.14, slide: 70 },
+    { freq: 120, dur: 0.5, type: "sawtooth", gain: 0.12, delay: 0.2, slide: 45 },
+  ],
 };
 
 let ctx: AudioContext | null = null;

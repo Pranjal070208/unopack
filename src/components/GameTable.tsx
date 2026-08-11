@@ -1,16 +1,20 @@
-import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
-import { PlayerAvatar } from "./PlayerAvatar";
+import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { PlayerHand } from "./PlayerHand";
-import { DiscardPile, DrawPile } from "./Piles";
-import { CardBack } from "./Card";
+import { TableSeats } from "./TableSeats";
+import { CenterTable } from "./CenterTable";
+import { EventFeed } from "./EventFeed";
 import { GAME_CONFIG } from "@/game/config";
+import { drawValue } from "@/game/cardTypes";
+import { tableSizeFor, type TableSize } from "@/game/seats";
 import type { Card, CardColor } from "@/game/gameTypes";
+import type { FeedItem } from "@/hooks/useGameEventAnimations";
+import type { GameRow, PlayerRow } from "@/hooks/useRoom";
+import { playSound } from "@/hooks/useSound";
+import { cn } from "@/lib/utils";
 
 const TURN_SECONDS: number = GAME_CONFIG.TURN_SECONDS;
-
-import type { GameRow, PlayerRow } from "@/hooks/useRoom";
-import { cn } from "@/lib/utils";
+const MERCY = GAME_CONFIG.MERCY_LIMIT;
 
 const COLOR_CHOICES: { color: Exclude<CardColor, "wild">; label: string; css: string }[] = [
   { color: "red", label: "Red", css: "var(--ono-red)" },
@@ -26,6 +30,7 @@ interface Props {
   hand: Card[];
   playable: string[];
   reactions: Record<string, string>;
+  feed: FeedItem[];
   onPlay: (cardId: string, color?: Exclude<CardColor, "wild">) => void;
   onDraw: () => void;
   onTimeout: () => void;
@@ -37,6 +42,17 @@ interface Props {
   footer: React.ReactNode;
 }
 
+function useTableSize(): TableSize {
+  const [size, setSize] = useState<TableSize>("desktop");
+  useEffect(() => {
+    const update = () => setSize(tableSizeFor(window.innerWidth));
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  return size;
+}
+
 export function GameTable({
   game,
   players,
@@ -44,6 +60,7 @@ export function GameTable({
   hand,
   playable,
   reactions,
+  feed,
   onPlay,
   onDraw,
   onTimeout,
@@ -55,6 +72,9 @@ export function GameTable({
   footer,
 }: Props) {
   const [remaining, setRemaining] = useState(TURN_SECONDS);
+  const size = useTableSize();
+  const compact = size !== "desktop";
+
   const myTurn = !!me && game.current_player_id === me.id;
   const opponents = players.filter((p) => p.id !== me?.id);
   const current = players.find((p) => p.id === game.current_player_id);
@@ -64,7 +84,13 @@ export function GameTable({
   const mustPickTarget = myTurn && phase === "CHOOSING_SWAP_TARGET";
   const canCallUno = !!me && uno?.playerId === me.id && !uno.called;
   const catchTarget = uno && !uno.called && uno.playerId !== me?.id ? uno.playerId : null;
+  const deckCount = game.public_state?.deckCount;
 
+  // Can the local player legally continue the stack right now?
+  const canStack = useMemo(() => {
+    if (game.pending_draw <= 0) return false;
+    return hand.some((c) => playable.includes(c.id) && drawValue(c) > 0);
+  }, [game.pending_draw, hand, playable]);
 
   useEffect(() => {
     const tick = () => {
@@ -78,111 +104,132 @@ export function GameTable({
     return () => clearInterval(i);
   }, [game.turn_started_at, game.turn_count, onTimeout]);
 
+  // Turn hand-off cue for the local player.
+  useEffect(() => {
+    if (myTurn) playSound("turn");
+  }, [myTurn, game.turn_count]);
+
   const urgent = remaining <= 10;
+  const mercyWarning = (me?.card_count ?? hand.length) >= MERCY - 1;
 
   return (
     <div className="relative flex min-h-[100dvh] flex-col">
       <div className="flex items-center justify-between gap-2 px-3 pt-3">{header}</div>
 
-      {/* Opponents */}
-      <div className="hide-scrollbar mt-3 flex justify-start gap-3 overflow-x-auto px-4 sm:justify-center">
-        {opponents.map((p) => {
-          const active = p.id === game.current_player_id;
-          return (
-            <motion.div
-              key={p.id}
-              layout
-              className={cn(
-                "panel flex min-w-[104px] flex-col items-center gap-1 p-2",
-                active && "border-[var(--ono-yellow)]",
-              )}
-            >
-              <PlayerAvatar
-                avatar={p.avatar}
-                nickname={p.nickname}
-                isHost={p.is_host}
-                connected={p.is_connected}
-                active={active}
-                eliminated={p.eliminated}
-                cardCount={p.card_count}
-                reaction={reactions[p.id] ?? null}
-                size="md"
-              />
-              <div className="flex -space-x-3">
-                {Array.from({ length: Math.min(p.card_count, 5) }).map((_, i) => (
-                  <CardBack key={i} size="sm" className="!h-7 !w-5 rounded-md" />
-                ))}
-              </div>
-              {p.card_count <= 2 && !p.eliminated ? (
-                <motion.span
-                  animate={{ opacity: [0.4, 1, 0.4] }}
-                  transition={{ duration: 1, repeat: Infinity }}
-                  className="font-display text-[9px] uppercase tracking-widest text-[var(--ono-red)]"
-                >
-                  Danger
-                </motion.span>
-              ) : null}
-            </motion.div>
-          );
-        })}
+      {/* HUD */}
+      <div className="mt-1 flex items-center justify-center gap-2 px-3 font-display text-[9px] uppercase tracking-[0.2em] text-muted-foreground">
+        <span>{players.filter((p) => !p.eliminated).length} alive</span>
+        <span aria-hidden>·</span>
+        <span style={{ color: `var(--ono-${game.active_color ?? "red"})` }}>
+          {(game.active_color ?? "—").toUpperCase()}
+        </span>
+        {game.pending_draw > 0 ? (
+          <>
+            <span aria-hidden>·</span>
+            <span className="text-[var(--ono-red)]">STACK +{game.pending_draw}</span>
+          </>
+        ) : null}
       </div>
 
-      {/* Table */}
-      <div className="relative flex flex-1 flex-col items-center justify-center gap-6 px-4 py-6">
-        <div className="text-center">
-          <motion.p
-            key={game.current_player_id ?? "none"}
-            initial={{ y: -10, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            className="font-display text-sm uppercase tracking-[0.3em]"
-            style={{ color: myTurn ? "var(--ono-yellow)" : "var(--muted-foreground)" }}
-          >
-            {myTurn ? "Your turn" : `${current?.nickname ?? "…"}'s turn`}
-          </motion.p>
-          <div className="mx-auto mt-2 h-1.5 w-40 overflow-hidden rounded-full bg-white/10">
-            <motion.div
-              animate={{ width: `${(remaining / TURN_SECONDS) * 100}%` }}
-              transition={{ ease: "linear", duration: 1 }}
-              className="h-full"
-              style={{ background: urgent ? "var(--ono-red)" : "var(--ono-green)" }}
-            />
-          </div>
-          <p
-            className={cn(
-              "mt-1 font-display text-xs",
-              urgent ? "animate-pulse text-[var(--ono-red)]" : "text-muted-foreground",
-            )}
-          >
-            {remaining}s
-          </p>
-        </div>
-
-        <div className="flex items-center justify-center gap-8 sm:gap-14">
-          <DrawPile
-            onDraw={onDraw}
-            disabled={!myTurn}
-            pending={game.pending_draw}
-            {...(me ? {} : {})}
+      {/* Mobile opponent strip */}
+      {size === "mobile" ? (
+        <div className="mt-2">
+          <TableSeats
+            players={players}
+            meId={me?.id ?? null}
+            currentPlayerId={game.current_player_id}
+            reactions={reactions}
+            size={size}
+            unoPlayerId={uno?.playerId ?? null}
           />
-          <DiscardPile top={game.discard_top} activeColor={game.active_color} direction={game.direction} />
+        </div>
+      ) : null}
+
+      {/* Table */}
+      <div className="relative flex flex-1 items-center justify-center px-4 py-4">
+        {size !== "mobile" ? (
+          <TableSeats
+            players={players}
+            meId={me?.id ?? null}
+            currentPlayerId={game.current_player_id}
+            reactions={reactions}
+            size={size}
+            unoPlayerId={uno?.playerId ?? null}
+          />
+        ) : null}
+
+        <EventFeed items={feed} className="absolute left-3 top-2 z-20 hidden sm:flex" />
+
+        <div className="relative z-10 flex flex-col items-center gap-4">
+          <div className="text-center">
+            <AnimatePresence mode="wait">
+              <motion.p
+                key={game.current_player_id ?? "none"}
+                initial={{ y: -14, opacity: 0, scale: myTurn ? 1.4 : 1 }}
+                animate={{ y: 0, opacity: 1, scale: 1 }}
+                exit={{ y: 10, opacity: 0 }}
+                className="font-display text-sm uppercase tracking-[0.3em]"
+                style={{ color: myTurn ? "var(--ono-yellow)" : "var(--muted-foreground)" }}
+              >
+                {myTurn ? "Your turn" : `${current?.nickname ?? "…"}'s turn`}
+              </motion.p>
+            </AnimatePresence>
+            <div className="mx-auto mt-2 h-1.5 w-40 overflow-hidden rounded-full bg-white/10">
+              <motion.div
+                animate={{ width: `${(remaining / TURN_SECONDS) * 100}%` }}
+                transition={{ ease: "linear", duration: 1 }}
+                className="h-full"
+                style={{ background: urgent ? "var(--ono-red)" : "var(--ono-green)" }}
+              />
+            </div>
+            <p
+              className={cn(
+                "mt-1 font-display text-xs tabular-nums",
+                urgent ? "animate-pulse text-[var(--ono-red)]" : "text-muted-foreground",
+              )}
+            >
+              {remaining}s
+            </p>
+          </div>
+
+          <CenterTable
+            top={game.discard_top}
+            activeColor={game.active_color}
+            direction={game.direction}
+            pending={game.pending_draw}
+            canStack={canStack}
+            myTurn={myTurn}
+            deckCount={deckCount}
+            onDraw={onDraw}
+            compact={compact}
+          />
         </div>
       </div>
 
       {/* My hand */}
-      <div className="pb-2">
+      <motion.div animate={{ opacity: myTurn ? 1 : 0.88 }} className="pb-2">
         <div className="mb-1 flex items-center justify-center gap-2 font-display text-[10px] uppercase tracking-widest text-muted-foreground">
           <span>{me?.nickname ?? "You"}</span>
-          <span className={cn(hand.length >= 20 && "text-[var(--ono-red)]")}>· {hand.length} cards</span>
-          {hand.length >= 20 ? <span className="text-[var(--ono-red)]">· ELIMINATION AT 25</span> : null}
+          <span className={cn(hand.length >= MERCY - 5 && "text-[var(--ono-red)]")}>· {hand.length} cards</span>
+          {mercyWarning ? (
+            <motion.span
+              animate={{ opacity: [0.4, 1, 0.4] }}
+              transition={{ duration: 0.9, repeat: Infinity }}
+              className="text-[var(--ono-red)]"
+            >
+              · one card from mercy
+            </motion.span>
+          ) : null}
         </div>
         <PlayerHand
           hand={hand}
           playable={playable}
           myTurn={myTurn}
+          touch={size === "mobile"}
           onPlay={onPlay}
           hint={
             myTurn
-              ? game.pending_draw > 0 && playable.length === 0
+              ? game.pending_draw > 0 && !canStack
                 ? `NO STACK — TAKE ${game.pending_draw}`
                 : playable.length === 0
                   ? "NO MOVES — DRAW A CARD"
@@ -190,7 +237,7 @@ export function GameTable({
               : null
           }
         />
-      </div>
+      </motion.div>
 
       {/* UNO shout / catch */}
       {canCallUno || catchTarget ? (
@@ -198,13 +245,18 @@ export function GameTable({
           <motion.button
             type="button"
             initial={{ scale: 0.7, opacity: 0 }}
-            animate={{ scale: [1, 1.06, 1], opacity: 1 }}
+            animate={{ scale: [1, 1.07, 1], opacity: 1 }}
+            whileTap={{ scale: 0.9 }}
             transition={{ duration: 0.9, repeat: Infinity }}
-            onClick={() => (canCallUno ? onCallUno() : catchTarget && onCatchUno(catchTarget))}
-            className="pointer-events-auto rounded-full border-[3px] border-white/80 px-7 py-3 font-display text-lg uppercase tracking-[0.2em] text-white"
+            onClick={() => {
+              playSound("uno");
+              if (canCallUno) onCallUno();
+              else if (catchTarget) onCatchUno(catchTarget);
+            }}
+            className="pointer-events-auto min-h-11 rounded-full border-[3px] border-white/80 px-7 py-3 font-display text-lg uppercase tracking-[0.2em] text-white"
             style={{
               background: canCallUno ? "var(--ono-yellow)" : "var(--ono-red)",
-              boxShadow: "var(--shadow-card)",
+              boxShadow: "var(--glow-yellow)",
             }}
           >
             {canCallUno
@@ -214,37 +266,43 @@ export function GameTable({
         </div>
       ) : null}
 
-      {/* Wild colour choice requested by the server */}
       {mustPickColor ? (
-        <Overlay title="Pick your poison">
+        <Overlay title="Choose color">
           <div className="grid grid-cols-2 gap-3">
             {COLOR_CHOICES.map((c) => (
-              <button
+              <motion.button
                 key={c.color}
                 type="button"
-                onClick={() => onChooseColor(c.color)}
-                className="h-20 rounded-2xl border-[3px] border-white/80 font-display text-sm uppercase tracking-widest text-white"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.94 }}
+                onClick={() => {
+                  playSound("select");
+                  onChooseColor(c.color);
+                }}
+                className="h-20 min-h-11 rounded-2xl border-[3px] border-white/80 font-display text-sm uppercase tracking-widest text-white"
                 style={{ background: c.css, boxShadow: "var(--shadow-card)" }}
               >
                 {c.label}
-              </button>
+              </motion.button>
             ))}
           </div>
         </Overlay>
       ) : null}
 
-      {/* Seven: choose whose hand to steal */}
       {mustPickTarget ? (
-        <Overlay title="Swap hands with">
-          <div className="flex flex-col gap-2">
+        <Overlay title="Choose a player">
+          <div className="hide-scrollbar flex max-h-[50vh] flex-col gap-2 overflow-y-auto">
             {opponents
               .filter((p) => !p.eliminated)
               .map((p) => (
                 <button
                   key={p.id}
                   type="button"
-                  onClick={() => onChooseSwapTarget(p.id)}
-                  className="panel flex items-center justify-between px-4 py-3 font-display text-sm uppercase tracking-widest"
+                  onClick={() => {
+                    playSound("swap");
+                    onChooseSwapTarget(p.id);
+                  }}
+                  className="panel flex min-h-11 items-center justify-between px-4 py-3 font-display text-sm uppercase tracking-widest"
                 >
                   <span>{p.nickname}</span>
                   <span className="text-[var(--ono-yellow)]">{p.card_count} cards</span>
@@ -256,7 +314,6 @@ export function GameTable({
 
       <div className="flex items-center justify-between gap-2 px-3 pb-3">{footer}</div>
     </div>
-
   );
 }
 

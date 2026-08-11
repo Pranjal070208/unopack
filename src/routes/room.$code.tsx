@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { LogOut, Volume2, VolumeX, Wifi, WifiOff } from "lucide-react";
@@ -6,11 +6,13 @@ import { toast } from "sonner";
 import { GameLobby } from "@/components/GameLobby";
 import { GameTable } from "@/components/GameTable";
 import { VictoryScreen } from "@/components/VictoryScreen";
-import { EffectLayer, type Effect } from "@/components/EffectLayer";
+import { GameAnnouncement } from "@/components/GameAnnouncement";
+import { useGameEventAnimations } from "@/hooks/useGameEventAnimations";
+import { useScreenShake } from "@/lib/fx";
 import { GameButton } from "@/components/GameButton";
-import { GameChat, ReactionPicker, type ChatMessage } from "@/components/Social";
+import { GameChat, ReactionPicker } from "@/components/Social";
 import { AVATARS } from "@/lib/avatars";
-import { useRoom, type EventRow } from "@/hooks/useRoom";
+import { useRoom } from "@/hooks/useRoom";
 import { playSound, useSound } from "@/hooks/useSound";
 import {
   enforceTimeout,
@@ -43,55 +45,6 @@ export const Route = createFileRoute("/room/$code")({
   component: RoomPage,
 });
 
-const PLAY_EFFECTS: Record<string, { text: string; tone: NonNullable<Effect["tone"]> }> = {
-  skip: { text: "SKIPPED!", tone: "yellow" },
-  reverse: { text: "REVERSE!", tone: "yellow" },
-  draw2: { text: "+2!", tone: "yellow" },
-  draw4: { text: "+4!", tone: "red" },
-  skipall: { text: "SKIP EVERYONE!", tone: "yellow" },
-  discardall: { text: "DISCARD ALL!", tone: "green" },
-  wildreversedraw4: { text: "REVERSE +4!", tone: "red" },
-  wilddraw6: { text: "+6!", tone: "red" },
-  wilddraw10: { text: "+10 NO MERCY!", tone: "red" },
-  wildroulette: { text: "COLOR ROULETTE!", tone: "blue" },
-};
-
-function effectFor(e: EventRow): Effect | null {
-  const data = e.event_data as { card?: { type?: string; value?: number }; count?: number };
-  switch (e.event_type) {
-    case "CARD_PLAYED": {
-      const type = data.card?.type;
-      if (!type) return null;
-      if (type === "number" && data.card?.value === 7) return { id: e.id, text: "SWAP!", tone: "green" };
-      if (type === "number" && data.card?.value === 0) return { id: e.id, text: "PASS 'EM ALL!", tone: "green" };
-      const fx = PLAY_EFFECTS[type];
-      if (!fx) return null;
-      return { id: e.id, text: fx.text, tone: fx.tone };
-    }
-    case "HAND_SWAPPED":
-      return { id: e.id, text: "HANDS SWAPPED!", tone: "green" };
-    case "HANDS_ROTATED":
-      return { id: e.id, text: "EVERYONE PASSES!", tone: "green" };
-    case "DRAW_STACK_RESOLVED":
-      return { id: e.id, text: `TAKE ${Number(data.count ?? 0)}!`, tone: "red" };
-    case "UNO_CALLED":
-      return { id: e.id, text: "ONO!", tone: "yellow" };
-    case "UNO_CAUGHT":
-      return { id: e.id, text: "CAUGHT! +2", tone: "red" };
-    case "PLAYER_ELIMINATED":
-      return { id: e.id, text: "ELIMINATED!", tone: "red" };
-    case "TURN_TIMEOUT":
-      return { id: e.id, text: "TOO SLOW!", tone: "red" };
-    case "DECK_RESHUFFLED":
-      return { id: e.id, text: "RESHUFFLE", tone: "blue" };
-    case "PLAYER_WON":
-      return { id: e.id, text: "WINNER!", tone: "yellow" };
-    default:
-      return null;
-  }
-}
-
-
 function RoomPage() {
   const { code } = Route.useParams();
   const navigate = useNavigate();
@@ -100,64 +53,16 @@ function RoomPage() {
   const { sfx: soundOn, setSfx } = useSound();
   const toggleSound = () => setSfx((v) => !v);
 
-  const [effect, setEffect] = useState<Effect | null>(null);
-  const [reactions, setReactions] = useState<Record<string, string>>({});
-  const [notice, setNotice] = useState<string | null>(null);
-  const seenRef = useRef<number>(0);
+  const shake = useScreenShake();
 
   const players = room.players;
   const me = room.me;
 
-  // React to new events: effects, sounds, reactions, notices.
-  useEffect(() => {
-    const fresh = room.events.filter((e) => e.id > seenRef.current);
-    if (fresh.length === 0) return;
-    const initial = seenRef.current === 0;
-    seenRef.current = room.events[room.events.length - 1]?.id ?? 0;
-    if (initial) return;
-
-    for (const e of fresh) {
-      const data = e.event_data as { nickname?: string; text?: string; count?: number };
-      if (e.event_type === "reaction" && e.player_id) {
-        const pid = e.player_id;
-        setReactions((r) => ({ ...r, [pid]: String(data.text ?? "🔥") }));
-        setTimeout(() => setReactions((r) => ({ ...r, [pid]: "" })), 2500);
-        continue;
-      }
-      if (e.event_type === "player_join") setNotice(`${data.nickname ?? "SOMEONE"} JOINED`);
-      if (e.event_type === "player_leave") setNotice(`${data.nickname ?? "SOMEONE"} LEFT`);
-      if (e.event_type === "player_kick") setNotice(`${data.nickname ?? "SOMEONE"} WAS KICKED`);
-      if (e.event_type === "CARD_PLAYED") playSound(effectFor(e) ? "special" : "play");
-      if (e.event_type === "CARD_DRAWN" || e.event_type === "DRAW_STACK_RESOLVED") playSound("draw");
-      if (e.event_type === "PLAYER_ELIMINATED") playSound("lose");
-      if (e.event_type === "GAME_ENDED" || e.event_type === "PLAYER_WON") playSound("win");
-      if (e.event_type === "GAME_STARTED") playSound("turn");
-
-      const fx = effectFor(e);
-      if (fx) setEffect(fx);
-    }
-    const t = setTimeout(() => setEffect(null), 1200);
-    return () => clearTimeout(t);
-  }, [room.events]);
-
-  useEffect(() => {
-    if (!notice) return;
-    const t = setTimeout(() => setNotice(null), 2600);
-    return () => clearTimeout(t);
-  }, [notice]);
-
-  const chat: ChatMessage[] = useMemo(
-    () =>
-      room.events
-        .filter((e) => e.event_type === "chat")
-        .slice(-40)
-        .map((e) => ({
-          id: e.id,
-          nickname: String((e.event_data as { nickname?: string }).nickname ?? "???"),
-          text: String((e.event_data as { text?: string }).text ?? ""),
-        })),
-    [room.events],
-  );
+  const { announcement, feed, reactions, notice, chat } = useGameEventAnimations({
+    events: room.events,
+    players,
+    myId: me?.id ?? null,
+  });
 
   const act = useCallback(
     async (fn: (args: { data: Record<string, unknown> }) => Promise<unknown>, extra: Record<string, unknown> = {}) => {
@@ -293,7 +198,15 @@ function RoomPage() {
 
   return (
     <main className="relative min-h-[100dvh] bg-background">
-      <EffectLayer effect={effect} />
+      <GameAnnouncement announcement={announcement} />
+      {shake ? (
+        <div
+          key={shake.key}
+          aria-hidden
+          className="pointer-events-none fixed inset-0 z-[45] animate-chaos-shake bg-white/5"
+          style={{ opacity: Math.min(0.5, 0.12 * shake.intensity) }}
+        />
+      ) : null}
 
       {finished && game ? (
         <VictoryScreen
@@ -307,6 +220,7 @@ function RoomPage() {
         />
       ) : game && game.status === "playing" && room.room?.status === "playing" ? (
         <GameTable
+          feed={feed}
           game={game}
           players={players}
           me={me}
