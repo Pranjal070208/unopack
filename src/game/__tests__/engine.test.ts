@@ -473,8 +473,8 @@ describe("wild color roulette", () => {
 });
 
 describe("opening card", () => {
-  it("ignores action cards and opens on a number", () => {
-    const { initializeDiscardPile } = require("../engine") as typeof import("../engine");
+  it("ignores action cards and opens on a number", async () => {
+    const { initializeDiscardPile } = await import("../engine");
     const state = table(3);
     state.pile = [];
     state.discardTop = null;
