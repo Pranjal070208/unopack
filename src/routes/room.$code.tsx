@@ -22,6 +22,7 @@ import {
   playAgain,
   returnToLobby,
   sendCommand,
+  setScoreMode,
   sendRoomEvent,
   startGame,
 } from "@/lib/game.functions";
@@ -259,6 +260,7 @@ function RoomPage() {
             onStart={() => void act(startGame as never)}
             onLeave={handleLeave}
             onKick={(id) => void act(kickPlayer as never, { targetId: id })}
+            onToggleScoreMode={(enabled) => void act(setScoreMode as never, { enabled })}
           />
           <div className="fixed bottom-4 right-4 z-30 flex items-center gap-2">{social}</div>
         </>
