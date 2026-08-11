@@ -307,7 +307,9 @@ function resolveColorRoulette(state: GameState, victimId: string, color: CardCol
     if (!card) break;
     revealed.push(card);
     // Wild cards never satisfy the chosen colour.
-    if (!isWild(card) && card.color === color) {
+    const hit = !isWild(card) && card.color === color;
+    events.push({ type: "ROULETTE_CARD_REVEALED", playerId: victimId, data: { card, color, hit } });
+    if (hit) {
       matched = true;
       break;
     }
@@ -315,11 +317,9 @@ function resolveColorRoulette(state: GameState, victimId: string, color: CardCol
   giveCards(state, victimId, revealed);
   state.stats.colorRoulettes += 1;
   state.stats.cardsDrawn += revealed.length;
-  events.push({
-    type: "COLOR_ROULETTE_RESOLVED",
-    playerId: victimId,
-    data: { color, revealed, count: revealed.length, matched },
-  });
+  const data = { color, revealed, count: revealed.length, matched };
+  events.push({ type: "COLOR_ROULETTE_RESOLVED", playerId: victimId, data });
+  events.push({ type: "ROULETTE_COMPLETED", playerId: victimId, data });
 }
 
 /* -------------------------------------------------------------------------- */
