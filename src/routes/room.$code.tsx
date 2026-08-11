@@ -232,6 +232,7 @@ function RoomPage() {
           }
           onDraw={() => void cmd({ type: "DRAW_CARD" })}
           onChooseColor={(color) => void cmd({ type: "CHOOSE_COLOR", color })}
+          onChooseRouletteColor={(color) => void cmd({ type: "CHOOSE_ROULETTE_COLOR", color })}
           onChooseSwapTarget={(targetId) => void cmd({ type: "CHOOSE_SWAP_TARGET", targetId })}
           onCallUno={() => void cmd({ type: "CALL_UNO" })}
           onCatchUno={(targetId) => void cmd({ type: "CATCH_UNO", targetId })}
