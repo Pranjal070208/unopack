@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { LogOut, Volume2, VolumeX, Wifi, WifiOff } from "lucide-react";
@@ -16,7 +16,10 @@ import { AVATARS } from "@/lib/avatars";
 import { useRoom } from "@/hooks/useRoom";
 import { playSound, useSound } from "@/hooks/useSound";
 import {
+  addBot,
   enforceTimeout,
+  nudgeBots,
+  removeBot,
   joinRoom,
   kickPlayer,
   leaveRoom,
@@ -98,6 +101,34 @@ function RoomPage() {
       }),
     [act],
   );
+
+  /**
+   * Bots are driven server-side, but a chain of bot turns can outlive the
+   * request that started it. Whenever the table is waiting on a bot, nudge the
+   * server to keep it moving.
+   */
+  const nudging = useRef(false);
+  const waitingOnBot = (() => {
+    const g = room.game;
+    if (!g || g.status !== "playing") return false;
+    const actor = players.find((p) => p.id === g.current_player_id);
+    return Boolean(actor?.is_bot) || players.some((p) => p.is_bot);
+  })();
+
+  useEffect(() => {
+    if (!creds || !waitingOnBot) return;
+    const tick = () => {
+      if (nudging.current) return;
+      nudging.current = true;
+      void nudgeBots({ data: creds })
+        .catch(() => undefined)
+        .finally(() => {
+          nudging.current = false;
+        });
+    };
+    const t = setInterval(tick, 4000);
+    return () => clearInterval(t);
+  }, [creds, waitingOnBot, room.game?.current_player_id, room.game?.turn_count]);
 
   const onTimeout = useCallback(() => {
     if (!creds) return;
@@ -263,6 +294,8 @@ function RoomPage() {
             onLeave={handleLeave}
             onKick={(id) => void act(kickPlayer as never, { targetId: id })}
             onToggleScoreMode={(enabled) => void act(setScoreMode as never, { enabled })}
+            onAddBot={(difficulty) => void act(addBot as never, { difficulty })}
+            onRemoveBot={(id) => void act(removeBot as never, id ? { targetId: id } : {})}
           />
           <div className="fixed bottom-4 right-4 z-30 flex items-center gap-2">{social}</div>
         </>

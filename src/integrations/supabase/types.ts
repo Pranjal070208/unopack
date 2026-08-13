@@ -172,10 +172,13 @@ export type Database = {
       players: {
         Row: {
           avatar: string
+          bot_difficulty: string | null
+          bot_persona: string | null
           card_count: number
           eliminated: boolean
           finished_rank: number | null
           id: string
+          is_bot: boolean
           is_connected: boolean
           is_host: boolean
           joined_at: string
@@ -189,10 +192,13 @@ export type Database = {
         }
         Insert: {
           avatar?: string
+          bot_difficulty?: string | null
+          bot_persona?: string | null
           card_count?: number
           eliminated?: boolean
           finished_rank?: number | null
           id?: string
+          is_bot?: boolean
           is_connected?: boolean
           is_host?: boolean
           joined_at?: string
@@ -206,10 +212,13 @@ export type Database = {
         }
         Update: {
           avatar?: string
+          bot_difficulty?: string | null
+          bot_persona?: string | null
           card_count?: number
           eliminated?: boolean
           finished_rank?: number | null
           id?: string
+          is_bot?: boolean
           is_connected?: boolean
           is_host?: boolean
           joined_at?: string

@@ -388,17 +388,19 @@ describe("wild reverse draw four", () => {
     expect(state.currentColor).toBe("green");
   });
 
-  it("returns the penalty to the player in a two player game", () => {
+  it("hands the penalty to the opponent in a two player game", () => {
     let state = table(2);
     state.hands["p1"] = [card("w", "wild", "wildreversedraw4"), card("keep", "blue", "number", 1)];
     state.hands["p2"] = filler("p2", 3);
     state = applyCommand(state, { type: "PLAY_CARD", playerId: "p1", cardId: "w", color: "green" }).state;
-    expect(state.currentPlayerId).toBe("p1");
+    // The reverse-as-skip shortcut must not bounce the player's own +4 back at them.
+    expect(state.currentPlayerId).toBe("p2");
     expect(state.drawStack.totalPenalty).toBe(4);
-    // p1 may still stack if able, otherwise takes the four
-    state = applyCommand(state, { type: "DRAW_CARD", playerId: "p1" }).state;
-    expect(state.hands["p1"]).toHaveLength(5);
+    state = applyCommand(state, { type: "DRAW_CARD", playerId: "p2" }).state;
+    expect(state.hands["p2"]).toHaveLength(7);
+    expect(state.currentPlayerId).toBe("p1");
   });
+
 
   it("asks for a colour when none was supplied", () => {
     const state = table(3);
@@ -630,5 +632,108 @@ describe("command validation", () => {
     const state = table(4);
     state.players.find((p) => p.id === "p2")!.eliminated = true;
     expect(nextPlayerId(state, "p1", 1)).toBe("p3");
+  });
+});
+
+/* ---------------------- audit: stacking is additive --------------------- */
+
+describe("draw stack arithmetic", () => {
+  it("adds face values and never multiplies by hand size", () => {
+    let state = table(4);
+    state.hands["p1"] = [card("a", "red", "draw2"), ...filler("p1", 6)];
+    state.hands["p2"] = [card("b", "wild", "wildreversedraw4"), ...filler("p2", 9)];
+    state.hands["p3"] = [card("c", "wild", "wilddraw10"), ...filler("p3", 2)];
+    state.hands["p4"] = filler("p4", 4);
+
+    state = applyCommand(state, { type: "PLAY_CARD", playerId: "p1", cardId: "a" }).state;
+    expect(state.drawStack.totalPenalty).toBe(2);
+    state = applyCommand(state, { type: "PLAY_CARD", playerId: "p2", cardId: "b", color: "red" }).state;
+    expect(state.drawStack.totalPenalty).toBe(6);
+    // 2 + 4 = 6, not 2 x hand size and not 4 x anything.
+    expect(state.drawStack.lastCardValue).toBe(4);
+  });
+
+  it("makes the giving-in player draw exactly the sum, once", () => {
+    let state = table(3);
+    state.hands["p1"] = [card("a", "red", "draw2"), ...filler("p1", 3)];
+    state.hands["p2"] = [card("b", "wild", "wilddraw10"), ...filler("p2", 5)];
+    state.hands["p3"] = filler("p3", 4);
+
+    state = applyCommand(state, { type: "PLAY_CARD", playerId: "p1", cardId: "a" }).state;
+    state = applyCommand(state, { type: "PLAY_CARD", playerId: "p2", cardId: "b", color: "red" }).state;
+    expect(state.drawStack.totalPenalty).toBe(12);
+    const before = state.hands["p3"]!.length;
+    state = applyCommand(state, { type: "DRAW_CARD", playerId: "p3" }).state;
+    expect(state.hands["p3"]).toHaveLength(before + 12);
+    expect(state.drawStack.active).toBe(false);
+    expect(state.currentPlayerId).toBe("p1");
+  });
+});
+
+/* ------------------- audit: ONO window ownership ------------------------ */
+
+describe("ONO window ownership", () => {
+  it("opens for whoever a 7 swap leaves on one card", () => {
+    let state = table(3);
+    state.hands["p1"] = [card("seven", "red", "number", 7), ...filler("p1", 4)];
+    state.hands["p2"] = [card("solo", "blue", "number", 3)];
+    state.hands["p3"] = filler("p3", 5);
+
+    state = applyCommand(state, {
+      type: "PLAY_CARD",
+      playerId: "p1",
+      cardId: "seven",
+      targetId: "p2",
+    }).state;
+
+    // p1 handed its 4 cards to p2 and took the single card: p1 is now catchable.
+    expect(state.hands["p1"]).toHaveLength(1);
+    expect(state.uno?.playerId).toBe("p1");
+    expect(state.uno?.called).toBe(false);
+  });
+
+  it("closes the window once the owner is no longer on one card", () => {
+    let state = table(3);
+    state.hands["p1"] = [card("play", "red", "number", 3), card("last", "red", "number", 4)];
+    state.hands["p2"] = filler("p2", 3);
+    state.hands["p3"] = filler("p3", 3);
+
+    state = applyCommand(state, { type: "PLAY_CARD", playerId: "p1", cardId: "play" }).state;
+    expect(state.uno?.playerId).toBe("p1");
+
+    state = applyCommand(state, { type: "CATCH_UNO", playerId: "p2", targetId: "p1" }).state;
+    expect(state.hands["p1"]).toHaveLength(3);
+    expect(state.uno).toBeNull();
+  });
+});
+
+/* ------------- audit: two player reverse without a live stack ----------- */
+
+describe("two player reverse", () => {
+  it("still acts as a skip when no draw stack is live", () => {
+    let state = table(2);
+    state.hands["p1"] = [card("rev", "red", "reverse"), ...filler("p1", 2)];
+    state = applyCommand(state, { type: "PLAY_CARD", playerId: "p1", cardId: "rev" }).state;
+    expect(state.currentPlayerId).toBe("p1");
+  });
+});
+
+/* -------------- audit: elimination during your own draw ----------------- */
+
+describe("mercy elimination on your own turn", () => {
+  it("passes the turn on to a live player", () => {
+    let state = table(3);
+    state.hands["p1"] = Array.from({ length: 24 }, (_, i) => card(`p1_m${i}`, "green", "number", 8));
+    state.hands["p2"] = filler("p2", 3);
+    state.hands["p3"] = filler("p3", 3);
+    state.currentColor = "red";
+    state.discardTop = card("top_red5", "red", "number", 5);
+
+    state = applyCommand(state, { type: "DRAW_CARD", playerId: "p1" }).state;
+    const p1 = state.players.find((p) => p.id === "p1")!;
+    if (p1.eliminated) {
+      expect(state.currentPlayerId).not.toBe("p1");
+      expect(["p2", "p3"]).toContain(state.currentPlayerId);
+    }
   });
 });

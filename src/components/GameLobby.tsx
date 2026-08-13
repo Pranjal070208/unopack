@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Copy, LogOut, UserX } from "lucide-react";
+import { Bot, Copy, LogOut, Minus, Plus, UserX } from "lucide-react";
 import { toast } from "sonner";
 import { GameButton } from "./GameButton";
 import { PlayerAvatar } from "./PlayerAvatar";
@@ -15,11 +16,27 @@ interface Props {
   onLeave: () => void;
   onKick: (id: string) => void;
   onToggleScoreMode: (enabled: boolean) => void;
+  onAddBot: (difficulty: "easy" | "normal" | "hard") => void;
+  onRemoveBot: (id?: string) => void;
 }
 
-export function GameLobby({ room, players, me, notice, onStart, onLeave, onKick, onToggleScoreMode }: Props) {
+export function GameLobby({
+  room,
+  players,
+  me,
+  notice,
+  onStart,
+  onLeave,
+  onKick,
+  onToggleScoreMode,
+  onAddBot,
+  onRemoveBot,
+}: Props) {
   const isHost = me?.is_host ?? false;
   const canStart = players.length >= 2;
+  const bots = players.filter((p) => p.is_bot);
+  const roomFull = players.length >= room.max_players;
+  const [difficulty, setDifficulty] = useState<"easy" | "normal" | "hard">("normal");
 
   const copy = async (text: string, label: string) => {
     try {
@@ -102,8 +119,13 @@ export function GameLobby({ room, players, me, notice, onStart, onLeave, onKick,
                   size="lg"
                 />
                 <span className="font-display text-[10px] uppercase tracking-widest text-[var(--ono-green)]">
-                  {p.is_connected ? "Ready" : "Reconnecting…"}
+                  {p.is_bot ? "Bot ready" : p.is_connected ? "Ready" : "Reconnecting…"}
                 </span>
+                {p.is_bot ? (
+                  <span className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-[var(--ono-green)] px-2 py-0.5 font-display text-[9px] uppercase text-black">
+                    <Bot className="h-3 w-3" /> {p.bot_difficulty ?? "bot"}
+                  </span>
+                ) : null}
                 {p.id === me?.id ? (
                   <span className="absolute left-2 top-2 rounded-full bg-[var(--ono-yellow)] px-2 py-0.5 font-display text-[9px] uppercase text-black">
                     You
@@ -138,6 +160,41 @@ export function GameLobby({ room, players, me, notice, onStart, onLeave, onKick,
           </motion.p>
         ) : null}
       </AnimatePresence>
+
+      {/* Bots: the host can seat 1–3 computer opponents. */}
+      {isHost ? (
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+          <span className="font-display text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+            Bots {bots.length}/3
+          </span>
+          <div className="panel flex items-center gap-1 p-1">
+            {(["easy", "normal", "hard"] as const).map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDifficulty(d)}
+                className={
+                  "min-h-9 rounded-md px-3 font-display text-[10px] uppercase tracking-[0.2em] " +
+                  (difficulty === d ? "bg-[var(--ono-yellow)] text-black" : "text-muted-foreground")
+                }
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+          <GameButton
+            variant="secondary"
+            size="sm"
+            disabled={bots.length >= 3 || roomFull}
+            onClick={() => onAddBot(difficulty)}
+          >
+            <Plus className="mr-1 h-4 w-4" /> Add bot
+          </GameButton>
+          <GameButton variant="ghost" size="sm" disabled={bots.length === 0} onClick={() => onRemoveBot()}>
+            <Minus className="mr-1 h-4 w-4" /> Remove bot
+          </GameButton>
+        </div>
+      ) : null}
 
       {/* Optional Score Mode: play to 1000 points instead of a single hand. */}
       <div className="mt-6 flex justify-center">

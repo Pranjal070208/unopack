@@ -28,6 +28,8 @@ export interface PlayerRow {
   score: number;
   last_hand_points: number;
   joined_at: string;
+  is_bot?: boolean;
+  bot_difficulty?: string | null;
 }
 
 export interface GameRow {
@@ -83,7 +85,7 @@ export function useRoom(code: string, creds: RoomCreds | null) {
       supabase
         .from("players")
         .select(
-          "id, room_id, nickname, avatar, is_host, is_connected, seat, card_count, eliminated, finished_rank, score, last_hand_points, last_seen, joined_at",
+          "id, room_id, nickname, avatar, is_host, is_connected, seat, card_count, eliminated, finished_rank, score, last_hand_points, last_seen, joined_at, is_bot, bot_difficulty",
         )
         .eq("room_id", r.id)
         .order("seat"),

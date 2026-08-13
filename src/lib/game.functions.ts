@@ -122,7 +122,87 @@ export const startGame = createServerFn({ method: "POST" })
     const { db, player } = await s.authPlayer(data.playerId, data.secret);
     if (!player.is_host) throw new Error("HOST_ONLY");
     const game = await s.startNewGame(db, player.room_id);
+    const { runBots } = await import("./bots.server");
+    await runBots(db, player.room_id);
     return { gameId: game.id as string };
+  });
+
+/** Host-only: seat a computer opponent (max 3 per room). */
+export const addBot = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    identity.extend({ difficulty: z.enum(["easy", "normal", "hard"]).default("normal") }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const s = await import("./game.server");
+    const { BOT_AVATARS, BOT_NAMES } = await import("@/game/bot");
+    const { GAME_CONFIG } = await import("@/game/config");
+    const { db, player } = await s.authPlayer(data.playerId, data.secret);
+    if (!player.is_host) throw new Error("HOST_ONLY");
+
+    const { data: room } = await db.from("rooms").select("*").eq("id", player.room_id).maybeSingle();
+    if (!room || room.status !== "lobby") throw new Error("GAME_IN_PROGRESS");
+
+    const { data: seated } = await db.from("players").select("id, nickname, is_bot").eq("room_id", player.room_id);
+    const list = seated ?? [];
+    if (list.length >= Math.min(room.max_players, GAME_CONFIG.MAX_PLAYERS)) throw new Error("ROOM_FULL");
+    if (list.filter((p: { is_bot?: boolean }) => p.is_bot).length >= 3) throw new Error("BOT_LIMIT");
+
+    const taken = new Set(list.map((p: { nickname: string }) => p.nickname));
+    const name = BOT_NAMES.find((n) => !taken.has(n)) ?? `BOT ${list.length + 1}`;
+    const avatar = BOT_AVATARS[list.length % BOT_AVATARS.length]!;
+
+    const { data: bot, error } = await db
+      .from("players")
+      .insert({
+        room_id: player.room_id,
+        session_id: `bot_${crypto.randomUUID()}`,
+        nickname: name,
+        avatar,
+        is_host: false,
+        is_connected: true,
+        seat: list.length,
+        is_bot: true,
+        bot_difficulty: data.difficulty,
+        bot_persona: name,
+      })
+      .select()
+      .single();
+    if (error) throw new Error("BOT_ADD_FAILED");
+
+    await s.logEvents(db, player.room_id, null, [
+      { type: "player_join", playerId: bot.id, data: { nickname: name, bot: true } },
+    ]);
+    return { ok: true, botId: bot.id as string };
+  });
+
+/** Host-only: remove a bot seat. */
+export const removeBot = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => identity.extend({ targetId: z.string().uuid().optional() }).parse(d))
+  .handler(async ({ data }) => {
+    const s = await import("./game.server");
+    const { db, player } = await s.authPlayer(data.playerId, data.secret);
+    if (!player.is_host) throw new Error("HOST_ONLY");
+
+    const query = db.from("players").select("*").eq("room_id", player.room_id).eq("is_bot", true);
+    const { data: bots } = data.targetId ? await query.eq("id", data.targetId) : await query.order("seat");
+    const target = (bots ?? [])[bots && bots.length ? bots.length - 1 : 0];
+    if (!target) throw new Error("NO_BOT");
+
+    await s.logEvents(db, player.room_id, null, [
+      { type: "player_leave", playerId: target.id, data: { nickname: target.nickname, bot: true } },
+    ]);
+    await db.from("players").delete().eq("id", target.id);
+    return { ok: true };
+  });
+
+/** Anyone may ask the server to advance any pending bot moves. */
+export const nudgeBots = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => identity.parse(d))
+  .handler(async ({ data }) => {
+    const s = await import("./game.server");
+    const { runBots } = await import("./bots.server");
+    const { db, player } = await s.authPlayer(data.playerId, data.secret);
+    return await runBots(db, player.room_id);
   });
 
 /** Host-only toggle for the optional 1000-point Score Mode. */
@@ -174,6 +254,8 @@ export const sendCommand = createServerFn({ method: "POST" })
     if (result.events.length === 0 && result.state === state) return { ok: true, duplicate: true };
     await s.saveState(db, game.id, player.room_id, result.state);
     await s.logEvents(db, player.room_id, game.id, result.events);
+    const { runBots } = await import("./bots.server");
+    await runBots(db, player.room_id);
     return { ok: true, duplicate: false };
   });
 
@@ -198,6 +280,8 @@ export const enforceTimeout = createServerFn({ method: "POST" })
     if (result.events.length === 0) return { ok: false };
     await s.saveState(db, game.id, player.room_id, result.state);
     await s.logEvents(db, player.room_id, game.id, result.events);
+    const { runBots } = await import("./bots.server");
+    await runBots(db, player.room_id);
     return { ok: true };
   });
 
@@ -274,6 +358,8 @@ export const playAgain = createServerFn({ method: "POST" })
     const { db, player } = await s.authPlayer(data.playerId, data.secret);
     if (!player.is_host) throw new Error("HOST_ONLY");
     await s.startNewGame(db, player.room_id);
+    const { runBots } = await import("./bots.server");
+    await runBots(db, player.room_id);
     return { ok: true };
   });
 
