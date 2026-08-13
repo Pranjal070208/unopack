@@ -427,19 +427,10 @@ function finishPlay(state: GameState, ctx: PlayCtx, events: GameEvent[]): void {
   checkMercyRule(state, events, playerId);
   if (checkWinConditions(state, events)) return;
 
-  // UNO window opens for the player who just played down to one card.
-  const myCount = state.hands[playerId]?.length ?? 0;
-  if (myCount === GAME_CONFIG.UNO_REQUIRED_AT) {
-    state.uno = {
-      playerId,
-      called: false,
-      deadline: Date.now() + GAME_CONFIG.UNO_WINDOW_MS,
-      turn: state.turnCount,
-    };
-    events.push({ type: "UNO_REQUIRED", playerId });
-  } else if (state.uno?.playerId === playerId) {
-    state.uno = null;
-  }
+  // The ONO window belongs to whoever ends up at one card — a 7 swap or a 0
+  // rotation can leave that with someone other than the player who played.
+  syncUnoWindow(state, events, playerId);
+
 
   advanceTurn(state, ctx, events);
   state.turnCount += 1;
@@ -449,12 +440,42 @@ function finishPlay(state: GameState, ctx: PlayCtx, events: GameEvent[]): void {
   void card;
 }
 
+/**
+ * Open / close the ONO window based on the CURRENT hand sizes. Any live player
+ * sitting on exactly one card is catchable, no matter how they got there
+ * (played a card, was handed a hand by a 7 or a 0). A stale window closes as
+ * soon as its owner is no longer at one card.
+ */
+function syncUnoWindow(state: GameState, events: GameEvent[], preferId?: string | null): void {
+  if (state.status === "finished") {
+    state.uno = null;
+    return;
+  }
+  const atOne = activePlayers(state).filter(
+    (p) => (state.hands[p.id]?.length ?? 0) === GAME_CONFIG.UNO_REQUIRED_AT,
+  );
+
+  if (state.uno && !atOne.some((p) => p.id === state.uno!.playerId)) state.uno = null;
+  if (state.uno) return;
+  if (atOne.length === 0) return;
+
+  const owner = atOne.find((p) => p.id === preferId) ?? atOne[0]!;
+  state.uno = {
+    playerId: owner.id,
+    called: false,
+    deadline: Date.now() + GAME_CONFIG.UNO_WINDOW_MS,
+    turn: state.turnCount,
+  };
+  events.push({ type: "UNO_REQUIRED", playerId: owner.id });
+}
+
 /** The catch window closes once the following player's turn has been played. */
 function expireUnoWindow(state: GameState): void {
   if (state.uno && !state.uno.called && state.turnCount > state.uno.turn + 1) {
     state.uno = null;
   }
 }
+
 
 function advanceTurn(state: GameState, ctx: PlayCtx, events: GameEvent[]): void {
   const { playerId, card } = ctx;
@@ -485,12 +506,14 @@ function advanceTurn(state: GameState, ctx: PlayCtx, events: GameEvent[]): void 
     }
   }
 
-
   // Reverse with two live players behaves like a Skip: the player goes again.
-  if ((card.type === "reverse" || card.type === "wildreversedraw4") && headsUp) {
+  // Never when a draw stack is live — a Wild Reverse Draw 4 must hand the
+  // penalty to the opponent, not back to the player who laid it.
+  if ((card.type === "reverse" || card.type === "wildreversedraw4") && headsUp && !state.drawStack.active) {
     state.currentPlayerId = nextPlayerId(state, playerId, 2);
     return;
   }
+
 
   state.currentPlayerId = nextPlayerId(state, playerId, 1);
 }
@@ -555,11 +578,14 @@ function drawCommand(state: GameState, playerId: string, events: GameEvent[]): v
     state.drawStack = { active: false, totalPenalty: 0, lastCardValue: 0, initiatorId: null };
     checkMercyRule(state, events, initiator);
     if (checkWinConditions(state, events)) return;
+    syncUnoWindow(state, events, playerId);
     state.currentPlayerId = nextPlayerId(state, playerId, 1);
     state.turnCount += 1;
     state.phase = "PLAYER_TURN";
+    expireUnoWindow(state);
     return;
   }
+
 
   // 2) No Mercy draw rule: keep drawing until a playable card appears, then play it.
   state.phase = "DRAWING_UNTIL_PLAYABLE";
@@ -595,9 +621,12 @@ function drawCommand(state: GameState, playerId: string, events: GameEvent[]): v
     return;
   }
 
+  syncUnoWindow(state, events, playerId);
   state.currentPlayerId = nextPlayerId(state, playerId, 1);
   state.turnCount += 1;
   state.phase = "PLAYER_TURN";
+  expireUnoWindow(state);
+
 }
 
 function chooseColor(state: GameState, playerId: string, color: CardColor, events: GameEvent[]): void {
@@ -646,8 +675,10 @@ function chooseRouletteColor(state: GameState, playerId: string, color: CardColo
   resolveColorRoulette(state, playerId, color, events);
   checkMercyRule(state, events, source);
   if (checkWinConditions(state, events)) return;
+  syncUnoWindow(state, events, playerId);
 
   events.push({ type: "PLAYER_SKIPPED", playerId });
+
   state.currentPlayerId = nextPlayerId(state, source, 2);
   state.turnCount += 1;
   state.phase = "PLAYER_TURN";
@@ -681,7 +712,17 @@ function catchUno(state: GameState, playerId: string, targetId: string, events: 
   state.uno = null;
   events.push({ type: "UNO_CAUGHT", playerId, data: { targetId, penalty: cards.length } });
   checkMercyRule(state, events, playerId);
-  checkWinConditions(state, events);
+  if (checkWinConditions(state, events)) return;
+  syncUnoWindow(state, events, null);
+}
+
+/** Colour the player holds most of — used when a stalled choice is auto-resolved. */
+export function dominantColor(state: GameState, playerId: string): CardColor {
+  const tally: Record<CardColor, number> = { red: 0, yellow: 0, green: 0, blue: 0 };
+  for (const c of state.hands[playerId] ?? []) {
+    if (c.color !== "wild") tally[c.color] += 1;
+  }
+  return (Object.keys(tally) as CardColor[]).reduce((best, c) => (tally[c] > tally[best] ? c : best), "red");
 }
 
 function timeout(state: GameState, events: GameEvent[]): void {
@@ -691,9 +732,11 @@ function timeout(state: GameState, events: GameEvent[]): void {
   if (state.pending) {
     // Auto-resolve a stalled choice so the table never locks up.
     if (state.pending.kind === "roulette") {
-      chooseRouletteColor(state, state.pending.playerId, state.currentColor ?? "red", events);
+      const victim = state.pending.playerId;
+      chooseRouletteColor(state, victim, dominantColor(state, victim), events);
     } else if (state.pending.kind === "color") {
-      chooseColor(state, current, state.currentColor ?? "red", events);
+      chooseColor(state, current, dominantColor(state, current), events);
+
     } else {
       const target = activePlayers(state).find((p) => p.id !== current);
       if (target) chooseSwapTarget(state, current, target.id, events);
